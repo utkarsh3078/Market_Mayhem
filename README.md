@@ -73,7 +73,7 @@ Rooms are created and joined over Socket.IO (`room:create`, `room:join`), so cre
 
 ### Socket.IO events
 
-Client → server: `room:create`, `room:join`, `room:leave`, `player:ready`, `game:start`, `game:reset`, `trade:submit`, `game:requestState`
+Client → server: `room:create`, `room:join`, `room:leave`, `player:ready`, `room:scenario` (host), `game:start` (host, optional `scenarioId`), `game:reset`, `trade:submit`, `game:requestState`
 
 Server → client: `session`, `room:state`, `player:state` (private), `game:started`, `news:publish`, `clue:private` (private), `market:update`, `trade:result` (private), `game:finished`
 
@@ -86,17 +86,36 @@ See `.env.example`.
 | Variable | Use |
 | --- | --- |
 | `PORT` | Game server port (default 4000) |
-| `CLIENT_ORIGIN` | Allowed frontend origin(s) for CORS, comma-separated |
+| `CLIENT_ORIGIN` | Allowed frontend origin(s) for CORS and WebSockets, comma-separated. Required in production. |
 | `NEXT_PUBLIC_SERVER_URL` | Game server URL used by the browser |
 | `NODE_ENV` | development / production |
 | `TICK_MS`, `STARTING_MS`, `RESOLVING_MS` | Round pacing |
 
 ## Deploying
 
-Deploy the Next.js app anywhere (for example, Vercel). Deploy the game server to a host that supports long-running Node processes and WebSockets (Render, Fly.io, Railway). Set `NEXT_PUBLIC_SERVER_URL` on the web app and `CLIENT_ORIGIN` on the server.
+Two pieces: the Next.js web app on Vercel, and the game server on a host that keeps a Node process running with WebSockets (Render is set up here; Railway and Fly.io also work).
+
+**1. Game server on Render**
+
+1. Render → **New → Blueprint**, pick this repository. `render.yaml` creates the `market-mayhem-server` web service (build `pnpm install`, start `pnpm start:server`, health check `/health`).
+2. Set `CLIENT_ORIGIN` to the web app URL from step 2 (comma-separate several, such as a preview and production URL). In production the server refuses to start without it, and it rejects WebSocket connections from any other origin.
+3. Open `https://<service>.onrender.com/health`. It should return `{"ok":true,...}`.
+
+**2. Web app on Vercel**
+
+1. Import the repository. Vercel detects Next.js and pnpm.
+2. Set `NEXT_PUBLIC_SERVER_URL` to the Render URL (`https://<service>.onrender.com`). It is baked in at build time, so redeploy after changing it.
+3. Go back to Render and make sure `CLIENT_ORIGIN` matches the Vercel URL exactly (scheme included, no trailing slash).
+
+**Smoke test:** create a room on a laptop, join from a phone on mobile data, and play a full round.
+
+**Demo-day notes**
+
+- Render's free plan sleeps when idle, and the first request afterwards can take close to a minute. Open `/health` about 10 minutes before a demo.
+- Fallback: `pnpm demo:fast` runs everything locally with a ~70 s trading phase.
 
 ## Known demo limits
 
 - State is in memory. A server restart ends active rooms. PostgreSQL/Prisma persistence is the next step, and the `Room` class is the single place to add it.
-- One scenario ("The Energy Shock"). New scenarios are plain config files in `server/scenarios/`.
+- One scenario so far ("The Energy Shock"). The host picks from every registered scenario in the lobby; see [docs/scenario-authoring.md](docs/scenario-authoring.md) to add one.
 - There is no AI. When AI explanations are added, they should only narrate results the engine already computed.
