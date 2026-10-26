@@ -15,7 +15,8 @@ const env = z
 
 const clientOrigins = env.CLIENT_ORIGIN?.split(",").map((o) => o.trim()).filter(Boolean);
 if (env.NODE_ENV === "production" && !clientOrigins?.length) {
-  console.warn("[market-mayhem] CLIENT_ORIGIN is not set; allowing all origins.");
+  console.error("[market-mayhem] CLIENT_ORIGIN must be set in production (comma-separated web app URLs).");
+  process.exit(1);
 }
 
 const server = createGameServer({

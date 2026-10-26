@@ -159,3 +159,109 @@ describe("multiplayer round", () => {
     assert.equal((await fetch(`${url}/api/rooms/ABCDE`)).status, 404);
   });
 });
+
+describe("hardening", () => {
+  it("handles a full room of 8 trading at once and closes trading at the bell", async () => {
+    const players = await Promise.all(Array.from({ length: 8 }, () => client()));
+    const [host, ...rest] = players;
+    const created = await call<RoomState>(host.socket, C2S.ROOM_CREATE, { displayName: "P0" });
+    assert.ok(created.ok);
+    const code = created.data.code;
+    for (const [i, p] of rest.entries()) {
+      assert.ok((await call(p.socket, C2S.ROOM_JOIN, { roomCode: code, displayName: `P${i + 1}` })).ok);
+    }
+    const ninth = await client();
+    const full = await call(ninth.socket, C2S.ROOM_JOIN, { roomCode: code, displayName: "P8" });
+    assert.equal(!full.ok && full.error.code, "ROOM_FULL");
+
+    const active = next<RoomState>(host.socket, S2C.ROOM_STATE, (s) => s.status === "ACTIVE");
+    const resolving = next<RoomState>(host.socket, S2C.ROOM_STATE, (s) => s.status === "RESOLVING");
+    const finished = next<GameResults>(host.socket, S2C.GAME_FINISHED);
+    assert.ok((await call(host.socket, C2S.GAME_START)).ok);
+    const roundId = (await active).roundId!;
+
+    // Everyone fires the same order twice at the same moment (a duplicate requestId).
+    const perPlayer = await Promise.all(
+      players.map(
+        (p, i) =>
+          new Promise<TradeResultPayload[]>((resolve) => {
+            const got: TradeResultPayload[] = [];
+            const onResult = (r: TradeResultPayload) => {
+              got.push(r);
+              if (got.length === 2) {
+                p.socket.off(S2C.TRADE_RESULT, onResult);
+                resolve(got);
+              }
+            };
+            p.socket.on(S2C.TRADE_RESULT, onResult);
+            const order = { roundId, requestId: `burst-${i}-0001`, symbol: "CLD", side: "BUY", quantity: 5 };
+            p.socket.emit(C2S.TRADE_SUBMIT, order);
+            p.socket.emit(C2S.TRADE_SUBMIT, order);
+          }),
+      ),
+    );
+    const results = perPlayer.flat();
+    assert.equal(results.filter((r) => r.ok).length, 8, "exactly one fill per player");
+    assert.equal(results.filter((r) => !r.ok && r.error.code === "DUPLICATE_REQUEST").length, 8);
+
+    await resolving;
+    const late = await trade(host.socket, { roundId, requestId: "burst-late-0001", symbol: "CLD", side: "SELL", quantity: 1 });
+    assert.equal(!late.ok && late.error.code, "ROUND_CLOSED");
+
+    const final = await finished;
+    assert.equal(final.leaderboard.length, 8);
+    assert.ok(final.leaderboard.every((r) => r.tradeCount === 1));
+  });
+
+  it("rate-limits room creation and joining", async () => {
+    const spammer = await client();
+    const codes: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const res = await call<RoomState>(spammer.socket, C2S.ROOM_CREATE, { displayName: "Spam" });
+      assert.ok(res.ok);
+      codes.push(res.data.code);
+    }
+    const blocked = await call(spammer.socket, C2S.ROOM_CREATE, { displayName: "Spam" });
+    assert.equal(!blocked.ok && blocked.error.code, "RATE_LIMITED");
+    const join = await call(spammer.socket, C2S.ROOM_JOIN, { roomCode: codes[0], displayName: "Spam" });
+    assert.equal(!join.ok && join.error.code, "RATE_LIMITED");
+  });
+});
+
+describe("allowed origins", () => {
+  const locked = createGameServer({
+    clientOrigins: ["https://play.example"],
+    timings: { startingMs: 100, tickMs: 10, resolvingMs: 10 },
+  });
+  let lockedUrl = "";
+
+  before(async () => {
+    await new Promise<void>((resolve) => locked.httpServer.listen(0, resolve));
+    lockedUrl = `http://localhost:${(locked.httpServer.address() as AddressInfo).port}`;
+  });
+  after(() => locked.close());
+
+  const attempt = (origin: string) =>
+    new Promise<boolean>((resolve) => {
+      const socket = connect(lockedUrl, {
+        transports: ["websocket"],
+        forceNew: true,
+        reconnection: false,
+        extraHeaders: { Origin: origin },
+      });
+      socket.once("connect", () => (socket.disconnect(), resolve(true)));
+      socket.once("connect_error", () => (socket.disconnect(), resolve(false)));
+    });
+
+  it("accepts WebSockets from the configured origin only", async () => {
+    assert.equal(await attempt("https://play.example"), true);
+    assert.equal(await attempt("https://evil.example"), false);
+  });
+
+  it("only sends CORS headers for the configured origin", async () => {
+    const good = await fetch(`${lockedUrl}/health`, { headers: { Origin: "https://play.example" } });
+    assert.equal(good.headers.get("access-control-allow-origin"), "https://play.example");
+    const bad = await fetch(`${lockedUrl}/health`, { headers: { Origin: "https://evil.example" } });
+    assert.equal(bad.headers.get("access-control-allow-origin"), null);
+  });
+});

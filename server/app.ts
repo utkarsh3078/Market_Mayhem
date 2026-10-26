@@ -60,7 +60,17 @@ export function createGameServer(options: GameServerOptions): {
   const app = express();
   app.use(cors({ origin: corsOrigin }));
   const httpServer = createServer(app);
-  const io = new Server(httpServer, { cors: { origin: corsOrigin } });
+  const io = new Server(httpServer, {
+    cors: { origin: corsOrigin },
+    // CORS headers don't stop a browser from opening a WebSocket, so check the Origin explicitly.
+    // Requests without an Origin (non-browser clients, tests) are allowed.
+    allowRequest: (req, callback) => {
+      const origin = req.headers.origin;
+      const allowed = !options.clientOrigins?.length || !origin || options.clientOrigins.includes(origin);
+      if (!allowed) log(`rejected connection from origin ${origin}`);
+      callback(null, allowed);
+    },
+  });
 
   const emitter: RoomEmitter = {
     toRoom: (code, event, payload) => io.to(roomChannel(code)).emit(event, payload),
