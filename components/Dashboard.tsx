@@ -19,7 +19,10 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
 
   if (!market) return null;
   const quotes = new Map(market.quotes.map((q) => [q.symbol, q]));
-  const holdingsValue = me ? me.portfolioValue - me.cash : 0;
+  // Value holdings at live quotes; the private state only refreshes when you trade.
+  const holdingsValue = me?.holdings.reduce((sum, h) => sum + h.quantity * (quotes.get(h.symbol)?.price ?? 0), 0) ?? 0;
+  const portfolioValue = me ? me.cash + holdingsValue : 0;
+  const pnl = portfolioValue - room.startingCash;
   const tradingOpen = room.status === "ACTIVE";
   const selectedAsset = ASSET_BY_SYMBOL[selected];
   const selectedQuote = quotes.get(selected)!;
@@ -77,12 +80,12 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
         <Panel className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-4">
           <Stat label="Cash" value={me ? formatCredits(me.cash) : "—"} />
           <Stat label="Holdings" value={me ? formatCredits(holdingsValue) : "—"} />
-          <Stat label="Portfolio value" value={me ? formatCredits(me.portfolioValue) : "—"} />
+          <Stat label="Portfolio value" value={me ? formatCredits(portfolioValue) : "—"} />
           <Stat
             label="Unrealized P&L"
-            value={me ? formatSigned(me.pnl) : "—"}
-            valueClass={me ? toneClass(me.pnl) : ""}
-            sub={me ? formatPct((me.pnl / room.startingCash) * 100) : undefined}
+            value={me ? formatSigned(pnl) : "—"}
+            valueClass={me ? toneClass(pnl) : ""}
+            sub={me ? formatPct((pnl / room.startingCash) * 100) : undefined}
           />
         </Panel>
 

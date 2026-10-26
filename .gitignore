@@ -47,3 +47,7 @@ next-env.d.ts
 
 # server build output
 /dist
+
+DESIGN.md
+Market_Mayhem_Execution_Plan.pdf
+AGENTS.md
