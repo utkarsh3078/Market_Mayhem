@@ -28,7 +28,7 @@ export function Results({ state, actions }: { state: GameState; actions: GameAct
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 py-6 sm:px-6">
+    <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-5 px-4 py-5 sm:px-6">
       <nav className="flex items-center justify-between">
         <Logo />
         <ConnectionDot status={state.connection} />
@@ -38,11 +38,11 @@ export function Results({ state, actions }: { state: GameState; actions: GameAct
       <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
         <Panel className="flex flex-col justify-between p-6">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted">Your finish</div>
+            <div className="eyebrow">Your finish</div>
             {mine ? (
               <>
                 <div className="mt-2 flex items-baseline gap-3">
-                  <span className="text-6xl font-bold">#{mine.rank}</span>
+                  <span className="font-display text-7xl leading-none tracking-tight">#{mine.rank}</span>
                   <span className="text-muted">of {results.leaderboard.length}</span>
                 </div>
                 <div className={`num mt-3 text-3xl font-bold ${toneClass(mine.pnl)}`}>
@@ -71,9 +71,9 @@ export function Results({ state, actions }: { state: GameState; actions: GameAct
           </div>
         </Panel>
 
-        <Panel tone="intel" className="bg-gradient-to-br from-intel/10 to-transparent p-6">
-          <div className="text-xs font-semibold uppercase tracking-wider text-intel">The hidden event</div>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">{results.reveal.headline}</h1>
+        <Panel tone="intel" className="border-t-[3px] border-t-accent p-6 sm:p-8">
+          <div className="eyebrow text-accent-ink">The hidden event</div>
+          <h1 className="mt-2 font-display text-4xl leading-[1.05] tracking-tight sm:text-5xl">{results.reveal.headline}</h1>
           <p className="mt-3 leading-relaxed text-muted">{results.reveal.summary}</p>
         </Panel>
       </section>
@@ -83,10 +83,10 @@ export function Results({ state, actions }: { state: GameState; actions: GameAct
         <Panel title="Final ranking · who knew what">
           <ol className="divide-y divide-line">
             {results.leaderboard.map((r) => (
-              <li key={r.playerId} className={`px-4 py-3 ${r.playerId === myId ? "bg-accent/5" : ""}`}>
+              <li key={r.playerId} className={`px-5 py-3.5 ${r.playerId === myId ? "bg-bg" : ""}`}>
                 <div className="flex items-center justify-between gap-3">
                   <span className="flex min-w-0 items-center gap-3">
-                    <span className="num w-8 font-mono text-lg font-bold text-muted">#{r.rank}</span>
+                    <span className="num w-8 font-display text-2xl text-muted">#{r.rank}</span>
                     <span className="truncate font-semibold">
                       {r.displayName}
                       {r.playerId === myId && <span className="font-normal text-muted"> (you)</span>}
@@ -100,9 +100,9 @@ export function Results({ state, actions }: { state: GameState; actions: GameAct
                   </span>
                 </div>
                 {r.clueTitle && (
-                  <div className="mt-2 ml-11 rounded-lg border border-intel/25 bg-intel/5 px-3 py-2 text-xs">
+                  <div className="mt-2 ml-11 rounded-xl border border-accent/25 bg-accent/5 px-3 py-2 text-xs">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-intel">🔒 {r.clueTitle}</span>
+                      <span className="font-semibold text-accent-ink">{r.clueTitle}</span>
                       {r.clueConfidence && <ConfidenceBadge level={r.clueConfidence} />}
                     </div>
                     <p className="mt-1 text-muted">{r.clueContent}</p>
@@ -114,10 +114,10 @@ export function Results({ state, actions }: { state: GameState; actions: GameAct
         </Panel>
 
         <Panel title="What you can take away">
-          <ul className="space-y-3 p-4">
+          <ul className="space-y-3 p-5">
             {results.reveal.lessons.map((lesson) => (
               <li key={lesson} className="flex gap-3 text-sm leading-relaxed">
-                <span className="text-warn" aria-hidden="true">
+                <span className="font-mono text-xs leading-6 text-accent" aria-hidden="true">
                   ◆
                 </span>
                 {lesson}
@@ -133,7 +133,7 @@ export function Results({ state, actions }: { state: GameState; actions: GameAct
           {results.reveal.assets.map((a) => {
             const asset = ASSET_BY_SYMBOL[a.symbol];
             return (
-              <div key={a.symbol} className="grid gap-3 px-4 py-4 md:grid-cols-[180px_140px_1fr] md:items-center">
+              <div key={a.symbol} className="grid gap-3 px-5 py-4 md:grid-cols-[180px_140px_1fr] md:items-center">
                 <div>
                   <div className="font-mono font-semibold">{a.symbol}</div>
                   <div className="text-xs text-muted">{asset.name}</div>

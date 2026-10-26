@@ -5,7 +5,7 @@ import { ASSETS, type AssetSymbol } from "@/shared/assets";
 import { FEE_BPS, MAX_ORDER_QUANTITY, tradeFee } from "@/shared/rules";
 import type { AssetQuote, PrivatePlayerState, RoomStatus, TradeSide } from "@/shared/types";
 import { formatCredits } from "@/lib/format";
-import { Button, Panel } from "./ui";
+import { Button, Panel, Segmented } from "./ui";
 
 export function TradePanel({
   symbol,
@@ -54,25 +54,20 @@ export function TradePanel({
 
   return (
     <Panel title="Place order">
-      <div className="flex flex-col gap-3 p-4">
-        <div className="grid grid-cols-2 gap-1 rounded-lg bg-bg p-1" role="radiogroup" aria-label="Order side">
-          {(["BUY", "SELL"] as const).map((s) => (
-            <button
-              key={s}
-              role="radio"
-              aria-checked={side === s}
-              onClick={() => {
-                setSide(s);
-                setReviewing(false);
-              }}
-              className={`rounded-md py-2 text-sm font-bold transition-colors ${
-                side === s ? (s === "BUY" ? "bg-up text-bg" : "bg-down text-bg") : "text-muted hover:text-ink"
-              }`}
-            >
-              {s === "BUY" ? "Buy" : "Sell"}
-            </button>
-          ))}
-        </div>
+      <div className="flex flex-col gap-3 p-5">
+        <Segmented
+          label="Order side"
+          options={[
+            { value: "BUY", label: "Buy" },
+            { value: "SELL", label: "Sell" },
+          ]}
+          value={side}
+          onChange={(s) => {
+            setSide(s);
+            setReviewing(false);
+          }}
+          activeClass={side === "BUY" ? "bg-up text-white shadow-sm" : "bg-down text-white shadow-sm"}
+        />
 
         <div className="grid grid-cols-2 gap-2">
           <label className="flex min-w-0 flex-col gap-1 text-xs text-muted">
@@ -83,7 +78,7 @@ export function TradePanel({
                 onSymbolChange(e.target.value as AssetSymbol);
                 setReviewing(false);
               }}
-              className="w-full min-w-0 rounded-lg border border-line bg-bg px-3 py-2.5 font-mono text-sm text-ink outline-none focus:border-accent"
+              className="w-full min-w-0 rounded-xl border border-line-strong bg-bg px-3 py-2.5 font-mono text-sm text-ink outline-none focus:border-ink"
             >
               {ASSETS.map((a) => (
                 <option key={a.symbol} value={a.symbol}>
@@ -101,7 +96,7 @@ export function TradePanel({
                 setQtyText(e.target.value.replace(/[^0-9]/g, ""));
                 setReviewing(false);
               }}
-              className="num w-full min-w-0 rounded-lg border border-line bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-accent"
+              className="num w-full min-w-0 rounded-xl border border-line-strong bg-bg px-3 py-2.5 text-sm text-ink outline-none focus:border-ink"
             />
           </label>
         </div>
@@ -111,7 +106,7 @@ export function TradePanel({
             <button
               key={n}
               onClick={() => setQtyText(String(n))}
-              className="num rounded-md border border-line px-2.5 py-1 text-xs text-muted hover:border-muted hover:text-ink"
+              className="num rounded-full border border-line px-3 py-1 text-xs text-muted hover:border-line-strong hover:text-ink"
             >
               {n}
             </button>
@@ -119,13 +114,13 @@ export function TradePanel({
           <button
             onClick={() => setQtyText(String(maxQty))}
             disabled={maxQty === 0}
-            className="rounded-md border border-line px-2.5 py-1 text-xs text-muted hover:border-muted hover:text-ink disabled:opacity-40"
+            className="rounded-full border border-line px-3 py-1 text-xs text-muted hover:border-line-strong hover:text-ink disabled:opacity-40"
           >
             Max ({maxQty})
           </button>
         </div>
 
-        <dl className="num space-y-1 rounded-lg bg-bg px-3 py-2.5 text-sm">
+        <dl className="num space-y-1 rounded-xl bg-bg px-4 py-3 text-sm">
           <Row label="Current price" value={formatCredits(quote.price)} />
           <Row label={`Fee (${FEE_BPS / 100}%)`} value={formatCredits(fee)} />
           <Row
@@ -137,7 +132,7 @@ export function TradePanel({
         </dl>
 
         {reviewing && !problem ? (
-          <div className="rounded-lg border border-accent/40 bg-accent/5 p-3" role="dialog" aria-label="Confirm trade">
+          <div className="rounded-xl border border-line-strong bg-bg p-4" role="dialog" aria-label="Confirm trade">
             <p className="text-sm">
               {side === "BUY" ? "Buy" : "Sell"} <strong className="num">{quantity}</strong>{" "}
               <strong className="font-mono">{symbol}</strong> at about{" "}

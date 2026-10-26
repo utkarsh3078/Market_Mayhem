@@ -26,24 +26,24 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
 
   const phase =
     room.status === "STARTING"
-      ? { label: "Market opens in", tone: "text-accent" }
+      ? { label: "Market opens in", tone: "text-ink" }
       : room.status === "ACTIVE"
         ? { label: "Trading closes in", tone: remaining !== null && remaining <= 15 ? "text-warn" : "text-ink" }
-        : { label: "Resolving", tone: "text-intel" };
+        : { label: "Resolving", tone: "text-accent-ink" };
 
   return (
     <div className="flex min-h-full flex-1 flex-col">
       {/* Top bar: room code • round timer • connection */}
-      <header className="sticky top-0 z-30 border-b border-line bg-bg/90 backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-line bg-panel/90 backdrop-blur">
         <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3 px-4 py-2.5">
           <div className="flex min-w-0 items-center gap-3">
             <Logo compact />
-            <span className="hidden font-semibold sm:inline">{room.scenario.name}</span>
-            <span className="rounded-md border border-line px-2 py-0.5 font-mono text-xs text-muted">{room.code}</span>
+            <span className="hidden truncate font-display text-xl tracking-tight sm:inline">{room.scenario.name}</span>
+            <span className="rounded-full bg-panel-2 px-2.5 py-0.5 font-mono text-xs text-muted">{room.code}</span>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-right" aria-live="off">
-              <div className="text-[10px] uppercase tracking-wider text-faint">{phase.label}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">{phase.label}</div>
               <div className={`num font-mono text-xl font-bold leading-none ${phase.tone}`}>
                 {room.status === "RESOLVING" ? "…" : formatClock(remaining)}
               </div>
@@ -53,13 +53,13 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
         </div>
         <div className="h-0.5 bg-line">
           <div
-            className="h-full bg-accent transition-[width] duration-500"
+            className="h-full bg-ink transition-[width] duration-500"
             style={{ width: `${Math.min(100, (market.tick / market.totalTicks) * 100)}%` }}
           />
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 px-4 py-4">
+      <main className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col gap-4 px-4 py-5">
         {room.status === "STARTING" && (
           <Banner tone="accent">
             <strong>The market opens in {remaining ?? "…"}s.</strong> Read the headlines and your private clue, then
@@ -74,7 +74,7 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
         )}
 
         {/* Portfolio strip */}
-        <Panel className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-4">
+        <Panel className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-4">
           <Stat label="Cash" value={me ? formatCredits(me.cash) : "—"} />
           <Stat label="Holdings" value={me ? formatCredits(holdingsValue) : "—"} />
           <Stat label="Portfolio value" value={me ? formatCredits(me.portfolioValue) : "—"} />
@@ -120,7 +120,7 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
                 />
               </div>
               <p className="px-4 pb-3 text-xs text-faint">
-                Sensitive to: {selectedAsset.sensitivity}. Dashed amber lines mark headlines.
+                Sensitive to: {selectedAsset.sensitivity}. Dashed lines mark headlines.
               </p>
             </Panel>
           </div>
@@ -150,7 +150,7 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
                   <li
                     key={entry.playerId}
                     className={`flex items-center justify-between gap-2 px-4 py-2 text-sm ${
-                      entry.playerId === state.session?.playerId ? "bg-accent/5" : ""
+                      entry.playerId === state.session?.playerId ? "bg-bg font-semibold" : ""
                     }`}
                   >
                     <span className="flex min-w-0 items-center gap-2">
@@ -171,8 +171,8 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
 }
 
 function Banner({ tone, children }: { tone: "accent" | "intel"; children: React.ReactNode }) {
-  const style = tone === "accent" ? "border-accent/40 bg-accent/10" : "border-intel/40 bg-intel/10";
-  return <div className={`rounded-xl border px-4 py-3 text-sm ${style}`}>{children}</div>;
+  const style = tone === "accent" ? "border-line bg-panel-2" : "border-accent/30 bg-accent/8";
+  return <div className={`rounded-2xl border px-5 py-3 text-sm leading-relaxed ${style}`}>{children}</div>;
 }
 
 function AssetTable({
@@ -203,12 +203,12 @@ function AssetTable({
             aria-selected={active}
             onClick={() => onSelect(q.symbol)}
             className={`grid w-full grid-cols-[1fr_auto] items-center gap-3 px-4 py-2.5 text-left transition-colors sm:grid-cols-[1fr_96px_auto] ${
-              active ? "bg-panel-2 shadow-[inset_3px_0_0_var(--accent)]" : "hover:bg-panel-2/60"
+              active ? "bg-bg shadow-[inset_3px_0_0_var(--ink)]" : "hover:bg-bg/70"
             }`}
           >
             <span className="min-w-0">
               <span className="font-mono font-semibold">{q.symbol}</span>
-              {held ? <span className="ml-2 rounded bg-accent/15 px-1.5 py-0.5 text-[10px] text-accent">{held} held</span> : null}
+              {held ? <span className="ml-2 rounded-full bg-panel-2 px-2 py-0.5 text-[10px] font-medium text-ink/70">{held} held</span> : null}
               <span className="block truncate text-xs text-muted">
                 {asset.name} · {asset.sector}
               </span>
@@ -240,7 +240,7 @@ function Positions({ state, quotes }: { state: GameState; quotes: Map<AssetSymbo
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`uppercase tracking-wider ${tab === t ? "text-ink" : "text-faint hover:text-muted"}`}
+              className={`uppercase tracking-[0.14em] ${tab === t ? "text-ink" : "text-faint hover:text-muted"}`}
             >
               {t === "holdings" ? `Holdings (${me?.holdings.length ?? 0})` : `Trades (${me?.trades.length ?? 0})`}
             </button>
@@ -304,17 +304,17 @@ function ClueCard({ clue }: { clue: PrivateClue | null }) {
   return (
     <Panel
       tone="intel"
-      className="bg-gradient-to-br from-intel/10 to-transparent"
-      title={<span className="text-intel">🔒 Private clue · only you</span>}
+      className="border-t-[3px] border-t-accent"
+      title="Private clue · only you"
       action={
         clue && (
-          <button className="text-xs text-muted hover:text-ink" onClick={() => setHidden((h) => !h)}>
+          <button className="rounded-full bg-panel-2 px-2.5 py-0.5 text-xs text-muted hover:text-ink" onClick={() => setHidden((h) => !h)}>
             {hidden ? "Reveal" : "Hide"}
           </button>
         )
       }
     >
-      <div className="p-4">
+      <div className="p-5">
         {!clue ? (
           <p className="text-sm text-faint">Your clue arrives when the round starts.</p>
         ) : hidden ? (
@@ -322,11 +322,11 @@ function ClueCard({ clue }: { clue: PrivateClue | null }) {
         ) : (
           <>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-semibold">{clue.title}</h3>
+              <h3 className="font-display text-2xl leading-tight tracking-tight">{clue.title}</h3>
               <ConfidenceBadge level={clue.confidence} />
             </div>
             <p className="mt-2 text-sm leading-relaxed">{clue.content}</p>
-            <p className="mt-3 border-t border-intel/20 pt-2 text-xs text-intel/90">💭 {clue.hint}</p>
+            <p className="mt-3 border-t border-line pt-2 text-xs leading-relaxed text-accent-ink">{clue.hint}</p>
           </>
         )}
       </div>
@@ -343,7 +343,7 @@ function NewsFeed({ news, fresh }: { news: NewsItem[]; fresh: string | null }) {
         {ordered.map((n) => (
           <li key={n.id} className={`px-4 py-3 ${n.id === fresh ? "flash-in" : ""}`}>
             <div className="flex items-center justify-between gap-2 text-[11px] uppercase tracking-wider">
-              <span className="font-semibold text-warn">{n.category}</span>
+              <span className="font-semibold tracking-[0.12em] text-ink/60">{n.category}</span>
               <span className="num text-faint">t{n.tick}</span>
             </div>
             <div className="mt-0.5 text-sm font-semibold leading-snug">{n.headline}</div>
