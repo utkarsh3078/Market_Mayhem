@@ -80,11 +80,11 @@ export function PriceChart({
               const change = ((point.price - open) / (open || 1)) * 100;
               const headline = newsByTick.get(point.tick)?.headline;
               return (
-                <div className="max-w-60 rounded-lg border border-line bg-panel-2 px-3 py-2 text-xs shadow-xl">
+                <div className="max-w-60 rounded-xl border border-line bg-panel px-3 py-2 text-xs shadow-card">
                   <div className="text-faint">{point.tick > totalTicks ? "Final (after reveal)" : `Tick ${point.tick}`}</div>
                   <div className="num text-sm font-semibold text-ink">{formatCredits(point.price * 100)}</div>
                   <div className="num text-muted">{formatPct(change)} vs open</div>
-                  {headline && <div className="mt-1 border-t border-line pt-1 text-warn">📰 {headline}</div>}
+                  {headline && <div className="mt-1 border-t border-line pt-1 text-warn">{headline}</div>}
                 </div>
               );
             }}

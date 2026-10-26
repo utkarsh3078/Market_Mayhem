@@ -1,20 +1,26 @@
 @import "tailwindcss";
 
-/* Market terminal theme: dark, high-contrast, restrained neon accents.
-   green = up, red = down, purple = private info, amber = warnings. */
+/* Minimal warm-neutral theme (DESIGN.md): warm off-white page, white cards,
+   near-black ink, mid-gray body copy, one orange accent reserved for private
+   info and active states. up/down are darkened so they pass WCAG AA on white,
+   and direction is always paired with a sign or arrow, never colour alone. */
 :root {
-  --bg: #070a12;
-  --panel: #0e1320;
-  --panel-2: #141a2b;
-  --line: #222a3f;
-  --ink: #e8ecf5;
-  --muted: #8b94ab;
-  --faint: #5b6480;
-  --up: #34d399;
-  --down: #fb7185;
-  --intel: #a78bfa;
-  --warn: #fbbf24;
-  --accent: #38bdf8;
+  --bg: #f4f3f1;
+  --panel: #ffffff;
+  --panel-2: #eceae7;
+  --line: #e3e1dd;
+  --line-strong: #dad8d4;
+  --ink: #1e1d1b;
+  --muted: #6e6c68;
+  --faint: #75736e;
+  --up: #1a7f37;
+  --down: #c0352b;
+  --accent: #e8531f;
+  --accent-ink: #b5410f;
+  --intel: var(--accent);
+  --warn: #9a5800;
+  --night: #1c1b1a;
+  --shadow-card: 0 1px 2px rgb(30 29 27 / 0.04), 0 12px 32px -16px rgb(30 29 27 / 0.14);
 }
 
 @theme inline {
@@ -22,20 +28,25 @@
   --color-panel: var(--panel);
   --color-panel-2: var(--panel-2);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-ink: var(--ink);
   --color-muted: var(--muted);
   --color-faint: var(--faint);
   --color-up: var(--up);
   --color-down: var(--down);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
   --color-intel: var(--intel);
   --color-warn: var(--warn);
-  --color-accent: var(--accent);
+  --color-night: var(--night);
+  --shadow-card: var(--shadow-card);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-instrument-serif);
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
@@ -44,13 +55,29 @@ body {
   font-family: var(--font-geist-sans), system-ui, sans-serif;
 }
 
+::selection {
+  background: color-mix(in oklab, var(--accent) 22%, transparent);
+}
+
 .num {
   font-variant-numeric: tabular-nums;
 }
 
+/* Tiny letter-spaced uppercase label used above headings and in card headers.
+   In the components layer so text-* utilities can still override its colour. */
+@layer components {
+  .eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+}
+
 @keyframes flash-in {
   from {
-    background-color: color-mix(in oklab, var(--warn) 22%, transparent);
+    background-color: color-mix(in oklab, var(--accent) 12%, transparent);
   }
   to {
     background-color: transparent;
@@ -76,9 +103,41 @@ body {
   animation: toast-in 0.2s ease-out;
 }
 
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rise-in {
+  animation: rise-in 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+/* Infinite ticker: the track holds two copies of the row and slides by half. */
+@keyframes marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.marquee-track {
+  animation: marquee 38s linear infinite;
+}
+
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .flash-in,
-  .toast-in {
+  .toast-in,
+  .rise-in,
+  .marquee-track {
     animation: none;
   }
 }

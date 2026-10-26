@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { ROOM_CODE_LENGTH } from "../../shared/rules";
-import type { ScenarioConfig } from "../scenarios/types";
+import type { ScenarioRegistry } from "../scenarios";
 import { Room, type RoomEmitter, type RoomTimings } from "./Room";
 
 // No 0/O/1/I to keep codes easy to read aloud.
@@ -12,7 +12,8 @@ export class RoomManager {
   private sweeper: NodeJS.Timeout;
 
   constructor(
-    private readonly scenario: ScenarioConfig,
+    private readonly registry: ScenarioRegistry,
+    private readonly defaultScenarioId: string,
     private readonly timings: RoomTimings,
     private readonly emitter: RoomEmitter,
   ) {
@@ -25,7 +26,15 @@ export class RoomManager {
     do {
       code = Array.from({ length: ROOM_CODE_LENGTH }, () => CODE_ALPHABET[randomInt(CODE_ALPHABET.length)]).join("");
     } while (this.rooms.has(code));
-    const room = new Room(code, hostId, hostName, this.scenario, this.timings, this.emitter);
+    const room = new Room(
+      code,
+      hostId,
+      hostName,
+      this.registry,
+      this.defaultScenarioId,
+      this.timings,
+      this.emitter,
+    );
     this.rooms.set(code, room);
     return room;
   }

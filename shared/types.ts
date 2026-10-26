@@ -18,7 +18,8 @@ export type ErrorCode =
   | "INSUFFICIENT_CASH"
   | "INSUFFICIENT_HOLDINGS"
   | "DUPLICATE_REQUEST"
-  | "RATE_LIMITED";
+  | "RATE_LIMITED"
+  | "UNKNOWN_SCENARIO";
 
 export interface GameError {
   code: ErrorCode;
@@ -113,10 +114,14 @@ export interface LeaderboardEntry {
   rank: number;
 }
 
-export interface ScenarioSummary {
+/** Public, pre-round view of a scenario. Hidden fields (events, clues, resolution) never leave the server. */
+export interface ScenarioListing {
   id: string;
   name: string;
   teaser: string;
+}
+
+export interface ScenarioSummary extends ScenarioListing {
   seed: string;
 }
 
@@ -127,6 +132,8 @@ export interface RoomState {
   hostPlayerId: string;
   players: PublicPlayer[];
   scenario: ScenarioSummary;
+  /** Scenarios the host can pick from while the room is in the lobby. */
+  scenarios: ScenarioListing[];
   /** Server epoch ms when the current timed phase ends. */
   phaseEndsAt: number | null;
   serverNow: number;

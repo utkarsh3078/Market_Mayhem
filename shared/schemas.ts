@@ -23,6 +23,12 @@ export const roomJoinSchema = z.object({
 
 export const playerReadySchema = z.object({ ready: z.boolean() });
 
+export const scenarioIdSchema = z.string().trim().min(1).max(64);
+
+export const scenarioSelectSchema = z.object({ scenarioId: scenarioIdSchema });
+
+export const gameStartSchema = z.object({ scenarioId: scenarioIdSchema.optional() });
+
 export const tradeSubmitSchema = z.object({
   roundId: z.string().min(1).max(64),
   requestId: z.string().min(8).max(64),
@@ -33,4 +39,5 @@ export const tradeSubmitSchema = z.object({
 
 export type RoomCreateInput = z.infer<typeof roomCreateSchema>;
 export type RoomJoinInput = z.infer<typeof roomJoinSchema>;
+export type GameStartInput = z.infer<typeof gameStartSchema>;
 export type TradeSubmitInput = z.infer<typeof tradeSubmitSchema>;

@@ -1,0 +1,22 @@
+# Render blueprint for the game server (Express + Socket.IO). The Next.js app deploys to Vercel.
+# Render → New → Blueprint → pick this repo. Then set CLIENT_ORIGIN to the Vercel URL.
+services:
+  - type: web
+    name: market-mayhem-server
+    runtime: node
+    plan: free # sleeps when idle: open /health ~10 minutes before a demo
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm start:server
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NODE_ENV
+        value: production
+      # Comma-separated web app origins, e.g. https://market-mayhem.vercel.app
+      # The server refuses to start in production without it.
+      - key: CLIENT_ORIGIN
+        sync: false
+      # Optional. When set, finished rounds are saved to PostgreSQL.
+      - key: DATABASE_URL
+        sync: false
