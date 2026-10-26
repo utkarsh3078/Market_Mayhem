@@ -34,6 +34,7 @@ import {
   toHoldings,
   type Account,
 } from "../engine/portfolio";
+import { publicScenarios, type ScenarioRegistry } from "../scenarios";
 import type { ScenarioConfig } from "../scenarios/types";
 
 export interface RoomTimings {
@@ -75,6 +76,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   INSUFFICIENT_HOLDINGS: "You can't sell more shares than you hold.",
   DUPLICATE_REQUEST: "That order was already submitted.",
   RATE_LIMITED: "Slow down a little and try again.",
+  UNKNOWN_SCENARIO: "That scenario doesn't exist.",
 };
 
 const HOST_GRACE_MS = 15_000;
@@ -102,15 +104,20 @@ export class Room {
   private timeout: NodeJS.Timeout | null = null;
   private interval: NodeJS.Timeout | null = null;
   private hostTimer: NodeJS.Timeout | null = null;
+  private scenario: ScenarioConfig;
 
   constructor(
     readonly code: string,
     hostId: string,
     hostName: string,
-    private readonly scenario: ScenarioConfig,
+    private readonly registry: ScenarioRegistry,
+    scenarioId: string,
     private readonly timings: RoomTimings,
     private readonly emitter: RoomEmitter,
   ) {
+    const scenario = registry.get(scenarioId);
+    if (!scenario) throw new Error(`Unknown scenario: ${scenarioId}`);
+    this.scenario = scenario;
     this.hostPlayerId = hostId;
     this.addPlayer(hostId, hostName);
   }
@@ -195,12 +202,32 @@ export class Room {
     if (next) this.hostPlayerId = next.id;
   }
 
-  // ---------- lifecycle: LOBBY → STARTING → ACTIVE → RESOLVING → FINISHED ----------
+  get scenarioId(): string {
+    return this.scenario.id;
+  }
 
-  start(requesterId: string): GameError | null {
+  /** Host-only, lobby-only. The choice is public; the scenario's hidden fields stay here. */
+  selectScenario(requesterId: string, scenarioId: string): GameError | null {
     if (!this.players.has(requesterId)) return gameError("NOT_IN_ROOM");
     if (requesterId !== this.hostPlayerId) return gameError("NOT_HOST");
     if (this.status !== "LOBBY") return gameError("ROUND_IN_PROGRESS");
+    const scenario = this.registry.get(scenarioId);
+    if (!scenario) return gameError("UNKNOWN_SCENARIO");
+    this.scenario = scenario;
+    this.touch();
+    return null;
+  }
+
+  // ---------- lifecycle: LOBBY → STARTING → ACTIVE → RESOLVING → FINISHED ----------
+
+  start(requesterId: string, scenarioId?: string): GameError | null {
+    if (!this.players.has(requesterId)) return gameError("NOT_IN_ROOM");
+    if (requesterId !== this.hostPlayerId) return gameError("NOT_HOST");
+    if (this.status !== "LOBBY") return gameError("ROUND_IN_PROGRESS");
+    if (scenarioId !== undefined) {
+      const error = this.selectScenario(requesterId, scenarioId);
+      if (error) return error;
+    }
 
     this.status = "STARTING";
     this.roundId = randomUUID();
@@ -397,6 +424,7 @@ export class Room {
         teaser: this.scenario.teaser,
         seed: this.scenario.seed,
       },
+      scenarios: publicScenarios(this.registry),
       phaseEndsAt: this.phaseEndsAt,
       serverNow: Date.now(),
       startingCash: STARTING_CASH,

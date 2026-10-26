@@ -7,23 +7,28 @@ import type { z } from "zod";
 import { ASSETS } from "../shared/assets";
 import { C2S, S2C } from "../shared/events";
 import {
+  gameStartSchema,
   playerReadySchema,
   roomCodeSchema,
   roomCreateSchema,
   roomJoinSchema,
+  scenarioSelectSchema,
   tradeSubmitSchema,
 } from "../shared/schemas";
 import type { Ack, ErrorCode, GameError, RoomState, Session } from "../shared/types";
 import { gameError, type Room, type RoomEmitter, type RoomTimings } from "./game/Room";
 import { RoomManager } from "./game/RoomManager";
-import { energyShock } from "./scenarios/energyShock";
+import { createRegistry, DEFAULT_SCENARIO_ID, SCENARIOS } from "./scenarios";
 import type { ScenarioConfig } from "./scenarios/types";
 
 export interface GameServerOptions {
   /** Allowed browser origins; undefined allows any origin (development). */
   clientOrigins?: string[];
   timings: RoomTimings;
-  scenario?: ScenarioConfig;
+  /** Scenarios rooms can choose from; defaults to the registry in server/scenarios/index.ts. */
+  scenarios?: ScenarioConfig[];
+  /** Scenario a new room starts with; defaults to the first of `scenarios`, or energy-shock. */
+  defaultScenarioId?: string;
   log?: (message: string) => void;
 }
 
@@ -61,7 +66,11 @@ export function createGameServer(options: GameServerOptions): {
     toRoom: (code, event, payload) => io.to(roomChannel(code)).emit(event, payload),
     toPlayer: (playerId, event, payload) => io.to(playerChannel(playerId)).emit(event, payload),
   };
-  const rooms = new RoomManager(options.scenario ?? energyShock, options.timings, emitter);
+  const registry = options.scenarios ? createRegistry(options.scenarios) : SCENARIOS;
+  const defaultScenarioId =
+    options.defaultScenarioId ?? (options.scenarios ? options.scenarios[0].id : DEFAULT_SCENARIO_ID);
+  if (!registry.has(defaultScenarioId)) throw new Error(`Unknown default scenario: ${defaultScenarioId}`);
+  const rooms = new RoomManager(registry, defaultScenarioId, options.timings, emitter);
   const sessions = new Map<string, SessionRecord>();
 
   // ---------- HTTP ----------
@@ -205,12 +214,25 @@ export function createGameServer(options: GameServerOptions): {
       reply(ack, { ok: true, data: null });
     });
 
-    socket.on(C2S.GAME_START, (_payload: unknown, ack: unknown) => {
+    socket.on(C2S.ROOM_SCENARIO, (payload: unknown, ack: unknown) => {
+      const input = parse(scenarioSelectSchema, payload, ack);
+      if (!input) return;
       const room = currentRoom();
       if (!room) return fail(ack, "NOT_IN_ROOM");
-      const error = room.start(session.playerId);
+      const error = room.selectScenario(session.playerId, input.scenarioId);
       if (error) return fail(ack, error);
-      log(`room ${room.code} started round ${room.roundId}`);
+      room.broadcastState();
+      reply(ack, { ok: true, data: null });
+    });
+
+    socket.on(C2S.GAME_START, (payload: unknown, ack: unknown) => {
+      const input = parse(gameStartSchema, payload, ack);
+      if (!input) return;
+      const room = currentRoom();
+      if (!room) return fail(ack, "NOT_IN_ROOM");
+      const error = room.start(session.playerId, input.scenarioId);
+      if (error) return fail(ack, error);
+      log(`room ${room.code} started round ${room.roundId} (${room.scenarioId})`);
       reply(ack, { ok: true, data: null });
     });
 

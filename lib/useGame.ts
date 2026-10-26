@@ -217,7 +217,7 @@ export function useGame() {
     });
     socket.on(S2C.CLUE_PRIVATE, (clue: PrivateClue) => {
       dispatch({ type: "clue", clue });
-      toast({ tone: "intel", title: "Private clue received", body: "Only you can see it. Check the purple card." });
+      toast({ tone: "intel", title: "Private clue received", body: "Only you can see it. Look for the orange card." });
     });
     socket.on(S2C.GAME_FINISHED, (results: GameResults) => dispatch({ type: "finished", results }));
     socket.on(S2C.TRADE_RESULT, (result: TradeResultPayload) => {
@@ -263,6 +263,7 @@ export function useGame() {
       dispatch({ type: "left" });
     },
     setReady: (ready: boolean) => call(C2S.PLAYER_READY, { ready }),
+    selectScenario: (scenarioId: string) => call(C2S.ROOM_SCENARIO, { scenarioId }),
     startGame: () => call(C2S.GAME_START),
     resetGame: () => call(C2S.GAME_RESET),
     submitTrade: (symbol: AssetSymbol, side: TradeSide, quantity: number) => {

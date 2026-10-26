@@ -5,6 +5,7 @@ export const C2S = {
   ROOM_JOIN: "room:join",
   ROOM_LEAVE: "room:leave",
   PLAYER_READY: "player:ready",
+  ROOM_SCENARIO: "room:scenario",
   GAME_START: "game:start",
   GAME_RESET: "game:reset",
   TRADE_SUBMIT: "trade:submit",
