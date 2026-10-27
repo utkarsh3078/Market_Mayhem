@@ -7,7 +7,7 @@
     "dev:web": "next dev",
     "dev:server": "tsx watch server/index.ts",
     "demo:fast": "concurrently -k -n web,server -c cyan,magenta \"next dev\" \"TICK_MS=700 STARTING_MS=5000 tsx server/index.ts\"",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "start:server": "prisma generate && NODE_ENV=production tsx server/index.ts",
     "test": "node --import tsx --test server/test/*.test.ts",
