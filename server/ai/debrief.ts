@@ -1,6 +1,7 @@
 import { ApiError, GoogleGenAI, ThinkingLevel, type ThinkingConfig } from "@google/genai";
 import { ASSET_BY_SYMBOL } from "../../shared/assets";
 import type { GameResults, TradeRecord } from "../../shared/types";
+import { estimateTokens, QuotaLimiter } from "./rateLimit";
 
 // Optional AI round summary (execution plan U6), written by Gemini. It only narrates results the engine already
 // computed: it never sets prices or scores. Every number in the text must appear in the fact
@@ -97,6 +98,7 @@ export function unsupportedNumbers(text: string, facts: FactSheet): string[] {
 //
 // Token budget per round (one call): a ~50-token instruction, a compact fact sheet (~100-200 tokens
 // for 2-8 players), and a reply capped at ~70 words. Thinking is off, and there are no retries.
+// Every call first takes a slot from the QuotaLimiter (requests/min, tokens/min, requests/day).
 
 const SYSTEM_INSTRUCTION =
   "Recap one round of a fictional trading game for its players: 2-3 lively sentences, under 60 words, plain text. " +
@@ -126,6 +128,7 @@ export const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
 // The API rejects deadlines under 10 s, and calls normally take ~1-1.5 s but occasionally spike to
 // ~10 s. The summary never blocks the results, so allow 20 s rather than retry (a retry doubles tokens).
 const TIMEOUT_MS = 20_000;
+const MAX_OUTPUT_TOKENS = 160;
 
 /** Gemini 2.x turns thinking off with a zero budget; later models use levels, MINIMAL being cheapest. */
 function thinkingFor(model: string): ThinkingConfig {
@@ -136,26 +139,39 @@ function thinkingFor(model: string): ThinkingConfig {
 export function createGeminiDebrief(options: {
   apiKey: string;
   model?: string;
+  limiter?: QuotaLimiter;
   log?: (message: string) => void;
 }): DebriefGenerator {
   const ai = new GoogleGenAI({ apiKey: options.apiKey });
   const model = options.model ?? DEFAULT_GEMINI_MODEL;
+  const limiter = options.limiter ?? new QuotaLimiter();
 
   return async (facts) => {
-    const response = await ai.models.generateContent({
-      model,
-      contents: factsToPrompt(facts),
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        maxOutputTokens: 160,
-        thinkingConfig: thinkingFor(model),
-        // Hard wall-clock limit (sent as the server deadline): the SDK retries up to 5 times by
-        // default, which would multiply it.
-        httpOptions: { timeout: TIMEOUT_MS, retryOptions: { attempts: 1 } },
-      },
-    });
+    const contents = factsToPrompt(facts);
+    // Throws (so the round falls back to the built-in debrief) when the quota has no room.
+    const slot = limiter.acquire(estimateTokens(SYSTEM_INSTRUCTION + contents) + MAX_OUTPUT_TOKENS);
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model,
+        contents,
+        config: {
+          systemInstruction: SYSTEM_INSTRUCTION,
+          maxOutputTokens: MAX_OUTPUT_TOKENS,
+          thinkingConfig: thinkingFor(model),
+          // Hard wall-clock limit (sent as the server deadline): the SDK retries up to 5 times by
+          // default, which would multiply it (and the quota used).
+          httpOptions: { timeout: TIMEOUT_MS, retryOptions: { attempts: 1 } },
+        },
+      });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 429) limiter.backOff();
+      throw error;
+    }
+
     const usage = response.usageMetadata;
     if (usage) {
+      slot.settle((usage.promptTokenCount ?? 0) + (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0));
       options.log?.(
         `AI summary tokens: ${usage.promptTokenCount ?? 0} in, ${usage.candidatesTokenCount ?? 0} out` +
           (usage.thoughtsTokenCount ? `, ${usage.thoughtsTokenCount} thinking` : ""),

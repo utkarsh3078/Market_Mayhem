@@ -132,6 +132,7 @@ See `.env.example`.
 | `DIRECT_URL` | Optional URL for migrations only, when `DATABASE_URL` is a transaction pooler. |
 | `GEMINI_API_KEY` | Optional. Turns on the AI-written round summary. Game server only. |
 | `GEMINI_MODEL` | Optional. Model for the summary (default `gemini-3.5-flash-lite`). |
+| `GEMINI_RPM` / `GEMINI_TPM` / `GEMINI_RPD` | Optional. The key's quota (default 15 requests/min, 250,000 tokens/min, 500 requests/day). |
 
 ## AI round summary (optional)
 
@@ -141,6 +142,8 @@ With `GEMINI_API_KEY` set on the game server, the results screen shows a short "
 - **A compact prompt:** about 60 tokens of instruction plus about 250 tokens of facts for a 4-player round (short labelled lines instead of JSON, which measured 923 tokens). Only the fields the recap needs are sent: the outcome, each company's % move, the ranking with each player's clue, and the three largest trades.
 - **Thinking off** (Gemini 2.x) or minimal (newer models), and the reply capped at about 70 words (`maxOutputTokens: 160`).
 - A 20-second limit and no retries. Calls normally take 1 to 1.5 s, but occasionally spike to around 10 s on Google's side, and a retry would double the tokens. The results never wait for it. If the call fails, is blocked, runs long or invents a number, the summary is silently dropped.
+
+- **Never over quota.** Every call first takes a slot from a limiter that stays 10% under the key's limits (13 requests/min, 225,000 tokens/min, 450 requests/day by default), over sliding windows. With no room, the call isn't made and the built-in debrief is shown. A 429 from the API pauses calls for a minute. After a restart, the daily count is rebuilt from rounds finished in the last 24 h (needs `DATABASE_URL`). The count is per server process, so a dev server using the same key isn't counted.
 
 The server logs each call's token usage: `AI summary tokens: N in, M out`.
 

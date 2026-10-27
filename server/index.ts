@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createGeminiDebrief, DEFAULT_GEMINI_MODEL, type DebriefGenerator } from "./ai/debrief";
+import { DEFAULT_QUOTA, QuotaLimiter } from "./ai/rateLimit";
 import { createGameServer } from "./app";
 import { parseClientOrigins } from "./origins";
 import { noopPersistence, type Persistence } from "./persistence/types";
@@ -27,6 +28,10 @@ const env = z
     /** Optional. Enables the AI-written round summary (U6). Server-side only, never sent to browsers. */
     GEMINI_API_KEY: z.string().optional(),
     GEMINI_MODEL: z.string().default(DEFAULT_GEMINI_MODEL),
+    /** The API key's quota (requests/min, tokens/min, requests/day). The server stays 10% under each. */
+    GEMINI_RPM: z.coerce.number().int().positive().default(DEFAULT_QUOTA.rpm),
+    GEMINI_TPM: z.coerce.number().int().positive().default(DEFAULT_QUOTA.tpm),
+    GEMINI_RPD: z.coerce.number().int().positive().default(DEFAULT_QUOTA.rpd),
   })
   .parse(process.env);
 
@@ -61,8 +66,12 @@ async function main() {
 
   let debrief: DebriefGenerator | undefined;
   if (env.GEMINI_API_KEY) {
-    debrief = createGeminiDebrief({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL, log });
-    log(`AI round summary: on (${env.GEMINI_MODEL})`);
+    const limiter = new QuotaLimiter({ rpm: env.GEMINI_RPM, tpm: env.GEMINI_TPM, rpd: env.GEMINI_RPD });
+    // Each finished round made at most one call, so recent rounds restore the daily count after a restart.
+    limiter.seed(await persistence.roundsFinishedSince(new Date(Date.now() - 24 * 60 * 60 * 1000)));
+    debrief = createGeminiDebrief({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL, limiter, log });
+    const { rpm, tpm, rpd } = limiter.limits;
+    log(`AI round summary: on (${env.GEMINI_MODEL}, at most ${rpm} req/min, ${tpm} tokens/min, ${rpd} req/day)`);
   } else {
     log("AI round summary: off (GEMINI_API_KEY not set)");
   }
