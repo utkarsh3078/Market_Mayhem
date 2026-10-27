@@ -11,11 +11,21 @@ import type { Persistence, RoundStartRecord } from "../persistence/types";
 
 const TIMINGS = { startingMs: 60, tickMs: 8, resolvingMs: 20 };
 const sockets: Socket[] = [];
-after(() => sockets.forEach((s) => s.disconnect()));
+// Servers still open after their test (e.g. an assertion failed before `stop`) would keep the
+// process alive and hang the run, so close them all at the end.
+const openServers = new Set<ReturnType<typeof createGameServer>>();
+const stop = async (server: ReturnType<typeof createGameServer>) => {
+  if (openServers.delete(server)) await server.close();
+};
+after(async () => {
+  sockets.forEach((s) => s.disconnect());
+  for (const server of [...openServers]) await stop(server);
+});
 
 async function start(persistence: Persistence) {
   const logs: string[] = [];
   const server = createGameServer({ timings: TIMINGS, persistence, log: (m) => logs.push(m) });
+  openServers.add(server);
   await new Promise<void>((resolve) => server.httpServer.listen(0, resolve));
   const url = `http://localhost:${(server.httpServer.address() as AddressInfo).port}`;
   return { server, url, logs };
@@ -119,7 +129,7 @@ describe("persistence in the game loop", () => {
     const { trade, results } = await playRound(url);
     assert.ok(trade.ok, "trading still works");
     assert.equal(results.leaderboard.length, 1);
-    await server.close();
+    await stop(server);
   });
 
   it("completes a round while a queued backend rejects every write", async () => {
@@ -136,7 +146,7 @@ describe("persistence in the game loop", () => {
     const { trade, results } = await playRound(url);
     assert.ok(trade.ok);
     assert.equal(results.leaderboard[0].tradeCount, 1);
-    await server.close();
+    await stop(server);
     assert.equal(logs.length, 3, "round start, trade and finish each failed and were logged");
   });
 
@@ -167,7 +177,7 @@ describe("persistence in the game loop", () => {
     assert.equal(finished.length, 1);
     assert.equal(finished[0].roundId, started[0].roundId);
     assert.deepEqual(finished[0].results, results);
-    await server.close();
+    await stop(server);
   });
 });
 
@@ -186,7 +196,7 @@ describe("GET /api/rooms/:code/results", () => {
     assert.deepEqual(((await hit.json()) as { results: unknown }).results, stored);
     assert.equal((await fetch(`${url}/api/rooms/WWWWW/results`)).status, 404);
     assert.equal((await fetch(`${url}/api/rooms/not-a-code/results`)).status, 404);
-    await server.close();
+    await stop(server);
   });
 
   it("returns 404 rather than failing when the lookup throws", async () => {
@@ -200,7 +210,7 @@ describe("GET /api/rooms/:code/results", () => {
       close: async () => {},
     });
     assert.equal((await fetch(`${url}/api/rooms/QQQQQ/results`)).status, 404);
-    await server.close();
+    await stop(server);
   });
 });
 

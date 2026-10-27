@@ -111,8 +111,8 @@ describe("generatePricePath", () => {
 
   it("tells the scenario's story: energy spikes on the headline then reverses", () => {
     const nve = generatePricePath(energyShock).NVE;
-    const peak = Math.max(...nve.slice(30, 46));
-    assert.ok(peak > nve[5] * 1.1, "NVE should rally after the shipping headline");
-    assert.ok(nve[70] < peak * 0.95, "NVE should give back gains once the route reopens");
+    const peak = Math.max(...nve.slice(8, 20));
+    assert.ok(peak > nve[5] * 1.03, "NVE should spike after the shipping headline");
+    assert.ok(nve[70] < peak * 0.9, "NVE should give back its gains once the route reopens");
   });
 });

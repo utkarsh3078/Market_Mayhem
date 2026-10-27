@@ -161,6 +161,9 @@ export interface ResultEntry extends LeaderboardEntry {
   clueConfidence: ClueConfidence | null;
 }
 
+/** Optional AI-written recap. It only narrates the results above; absent when the feature is off. */
+export type AiSummary = { status: "pending" } | { status: "ready"; text: string } | { status: "unavailable" };
+
 export interface GameResults {
   roundId: string;
   leaderboard: ResultEntry[];
@@ -170,6 +173,7 @@ export interface GameResults {
     assets: AssetReveal[];
     lessons: string[];
   };
+  aiSummary?: AiSummary;
 }
 
 // ---- Event payloads ----

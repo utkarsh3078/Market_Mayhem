@@ -15,6 +15,8 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
   const market = room.market;
   const me = state.me;
   const [selected, setSelected] = useState<AssetSymbol>("NVE");
+  // Shared by both clue placements (top on narrow screens, side column on wide ones).
+  const [clueHidden, setClueHidden] = useState(false);
   const remaining = useCountdown(room.phaseEndsAt, state.serverOffset);
 
   if (!market) return null;
@@ -75,6 +77,14 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
             calculated…
           </Banner>
         )}
+
+        {/* Below xl the side column stacks last, so show the clue first where players will see it. */}
+        <ClueCard
+          clue={state.clue}
+          hidden={clueHidden}
+          onToggle={() => setClueHidden((h) => !h)}
+          className="xl:hidden"
+        />
 
         {/* Portfolio strip */}
         <Panel className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-4">
@@ -145,7 +155,12 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
 
           {/* Side: clue, news, leaderboard */}
           <div className="flex min-w-0 flex-col gap-4 lg:col-span-2 xl:col-span-1">
-            <ClueCard clue={state.clue} />
+            <ClueCard
+              clue={state.clue}
+              hidden={clueHidden}
+              onToggle={() => setClueHidden((h) => !h)}
+              className="hidden xl:block"
+            />
             <NewsFeed news={room.news} fresh={state.freshNewsId} />
             <Panel title="Leaderboard (live)">
               <ol className="divide-y divide-line">
@@ -302,16 +317,25 @@ function Positions({ state, quotes }: { state: GameState; quotes: Map<AssetSymbo
   );
 }
 
-function ClueCard({ clue }: { clue: PrivateClue | null }) {
-  const [hidden, setHidden] = useState(false);
+function ClueCard({
+  clue,
+  hidden,
+  onToggle,
+  className = "",
+}: {
+  clue: PrivateClue | null;
+  hidden: boolean;
+  onToggle: () => void;
+  className?: string;
+}) {
   return (
     <Panel
       tone="intel"
-      className="border-t-[3px] border-t-accent"
+      className={`border-t-[3px] border-t-accent ${className}`}
       title="Private clue · only you"
       action={
         clue && (
-          <button className="rounded-full bg-panel-2 px-2.5 py-0.5 text-xs text-muted hover:text-ink" onClick={() => setHidden((h) => !h)}>
+          <button className="rounded-full bg-panel-2 px-2.5 py-0.5 text-xs text-muted hover:text-ink" onClick={onToggle}>
             {hidden ? "Reveal" : "Hide"}
           </button>
         )

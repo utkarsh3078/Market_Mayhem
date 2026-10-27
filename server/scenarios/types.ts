@@ -51,3 +51,15 @@ export interface ScenarioConfig {
     lessons: string[];
   };
 }
+
+/**
+ * What each clue and headline *suggests*, used only by the balance simulator (server/balance).
+ * Kept outside ScenarioConfig on purpose: clue and news objects are copied to players as-is,
+ * so anything inside them would be sent to the browser.
+ */
+export interface BalanceHints {
+  /** Clue id → the trade a player acting only on that clue makes. AVOID = stays in cash (no shorting). */
+  clues: Record<string, { symbol: AssetSymbol; action: "BUY" | "AVOID" }>;
+  /** News id → the asset the headline praises (what a headline chaser buys). Omit neutral/negative headlines. */
+  praises: Record<string, AssetSymbol>;
+}

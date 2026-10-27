@@ -13,6 +13,7 @@
     "test": "node --import tsx --test server/test/*.test.ts",
     "typecheck": "next typegen && prisma generate && tsc --noEmit",
     "lint": "eslint",
+    "balance": "tsx server/balance/report.ts",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate deploy",
@@ -20,6 +21,7 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@google/genai": "^2.31.0",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "cors": "^2.8.6",

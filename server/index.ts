@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createGeminiDebrief, DEFAULT_GEMINI_MODEL, type DebriefGenerator } from "./ai/debrief";
 import { createGameServer } from "./app";
 import { parseClientOrigins } from "./origins";
 import { noopPersistence, type Persistence } from "./persistence/types";
@@ -23,6 +24,9 @@ const env = z
     DATABASE_URL: z.url().optional().or(z.literal("").transform(() => undefined)),
     /** Optional PEM CA certificate for verifying the database's TLS certificate (e.g. Supabase's). */
     DATABASE_CA_CERT: z.string().optional(),
+    /** Optional. Enables the AI-written round summary (U6). Server-side only, never sent to browsers. */
+    GEMINI_API_KEY: z.string().optional(),
+    GEMINI_MODEL: z.string().default(DEFAULT_GEMINI_MODEL),
   })
   .parse(process.env);
 
@@ -55,10 +59,19 @@ async function main() {
     log("persistence: in memory only (DATABASE_URL not set)");
   }
 
+  let debrief: DebriefGenerator | undefined;
+  if (env.GEMINI_API_KEY) {
+    debrief = createGeminiDebrief({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL, log });
+    log(`AI round summary: on (${env.GEMINI_MODEL})`);
+  } else {
+    log("AI round summary: off (GEMINI_API_KEY not set)");
+  }
+
   const server = createGameServer({
     clientOrigins,
     timings: { startingMs: env.STARTING_MS, tickMs: env.TICK_MS, resolvingMs: env.RESOLVING_MS },
     persistence,
+    debrief,
     log,
   });
 

@@ -6,6 +6,35 @@ Players trade five fictional assets with virtual credits, react to public headli
 
 > Fictional educational simulation. Virtual credits only. Not financial advice.
 
+**Live demo:** _add your Vercel URL here_
+
+## How to play
+
+1. **Open a room.** Enter a name, create a room, and share the 5-letter code (or the invite link). Everyone starts with 100,000 virtual credits. The host picks one of four scenarios.
+2. **Read the news, guard your clue.** Headlines reach everyone at once. You also get a private clue that nobody else sees, and it might be wrong: check its confidence level.
+3. **Trade before the bell.** Buy and sell five fictional companies. When the timer ends, the hidden event resolves, final prices are applied, and the highest portfolio value wins. The results screen reveals every player's clue and explains what really happened.
+
+| Landing | Lobby |
+| --- | --- |
+| ![Landing page](docs/screenshots/landing.png) | ![Lobby with the scenario picker](docs/screenshots/lobby.png) |
+| **Trading** | **Results** |
+| ![Trading dashboard](docs/screenshots/dashboard.png) | ![Results and debrief](docs/screenshots/results.png) |
+
+On a phone, the private clue is pinned to the top of the trading screen:
+
+<img src="docs/screenshots/dashboard-phone.png" alt="Trading screen on a phone" width="280">
+
+### Scenarios
+
+| Scenario | The question | What it teaches |
+| --- | --- | --- |
+| The Energy Shock | Shipping lanes are jammed. Is the shortage real? | A temporary shock and a lasting change look the same on day one. |
+| The Rate Shock | A big rate hike is rumored. Who wins if money gets expensive? | One event can push different sectors in opposite directions. |
+| The Cloud Breach | CloudForge reports a security incident. How bad is it? | Scary headlines move prices before the facts arrive. |
+| The Battery Hype | A "battery breakthrough" is teased. Future, or headline? | Hype against fundamentals: buy the rumor, sell the news. |
+
+Rules in full: [docs/game-rules.md](docs/game-rules.md).
+
 ## Quick start
 
 ```bash
@@ -19,7 +48,8 @@ Open http://localhost:3000, create a room, then open the invite link in a **seco
 | --- | --- |
 | `pnpm dev` | Web app and game server with hot reload |
 | `pnpm demo:fast` | Same, with a ~70 s trading phase for quick demos |
-| `pnpm test` | Engine unit tests and a full multiplayer round over real sockets |
+| `pnpm test` | Engine, scenario-contract, balance, persistence and AI-summary tests, plus full multiplayer rounds over real sockets |
+| `pnpm balance` | Plays every scenario with three fixed strategies and prints the balance table |
 | `pnpm typecheck` / `pnpm lint` | TypeScript and ESLint |
 | `pnpm build` and `pnpm start` | Production web build |
 | `pnpm start:server` | Production game server |
@@ -51,9 +81,16 @@ server/
   game/Room.ts            Room state machine, trading, ticking, scoring, results
   game/RoomManager.ts     Collision-checked room codes, idle-room cleanup
   engine/                 Pure functions: seeded RNG, price model, portfolio math, ranking
-  scenarios/              Scenario configs (hidden truth). Server-only.
+  scenarios/              Scenario configs (hidden truth) and balance hints. Server-only.
+  balance/                Automated balance play-tests (`pnpm balance`)
+  persistence/            Optional PostgreSQL (Prisma) write queue
+  ai/                     Optional Gemini round summary (narrates computed results only)
   test/                   node:test suites
 docs/game-rules.md        Player-facing rules and the price model
+docs/scenario-authoring.md  The scenario contract and how to add one
+docs/qa-matrix.md         Manual QA checklist for staging
+docs/launch-checklist.md  Production release and demo-day checklist
+pitch/                    Speaker notes and the demo script
 ```
 
 **Server-authoritative.** The browser only sends intent (`symbol`, `side`, `quantity`, `requestId`, `roundId`). The server validates the payload with Zod, then checks membership, round state, deadline, cash and holdings. It sets the execution price and rejects duplicate request IDs. Cash, holdings, prices and scores never come from the client.
@@ -93,6 +130,19 @@ See `.env.example`.
 | `DATABASE_URL` | Optional PostgreSQL URL (Supabase session pooler). Unset = in memory only. |
 | `DATABASE_CA_CERT` | Optional PEM CA certificate for verified TLS to the database (Supabase's). |
 | `DIRECT_URL` | Optional URL for migrations only, when `DATABASE_URL` is a transaction pooler. |
+| `GEMINI_API_KEY` | Optional. Turns on the AI-written round summary. Game server only. |
+| `GEMINI_MODEL` | Optional. Model for the summary (default `gemini-3.5-flash-lite`). |
+
+## AI round summary (optional)
+
+With `GEMINI_API_KEY` set on the game server, the results screen shows a short "AI-written summary" a few seconds after a round ends. Results never wait for it. It is built to use as few tokens as possible:
+
+- **One call per round**, made when the round finishes, with no retries.
+- **A compact prompt:** about 60 tokens of instruction plus about 250 tokens of facts for a 4-player round (short labelled lines instead of JSON, which measured 923 tokens). Only the fields the recap needs are sent: the outcome, each company's % move, the ranking with each player's clue, and the three largest trades.
+- **Thinking off** (Gemini 2.x) or minimal (newer models), and the reply capped at about 70 words (`maxOutputTokens: 160`).
+- A 20-second limit and no retries. Calls normally take 1 to 1.5 s, but occasionally spike to around 10 s on Google's side, and a retry would double the tokens. The results never wait for it. If the call fails, is blocked, runs long or invents a number, the summary is silently dropped.
+
+The server logs each call's token usage: `AI summary tokens: N in, M out`.
 
 ## Deploying
 
@@ -132,5 +182,5 @@ If the database goes down, the game keeps running and only logs the failed write
 ## Known demo limits
 
 - Rounds in progress live in memory, so a server restart ends them. Finished rounds, trades and results are saved when `DATABASE_URL` is set (see "Optional: database on Supabase").
-- One scenario so far ("The Energy Shock"). The host picks from every registered scenario in the lobby; see [docs/scenario-authoring.md](docs/scenario-authoring.md) to add one.
-- There is no AI. When AI explanations are added, they should only narrate results the engine already computed.
+- Four scenarios. Adding one takes a config file and one registry line; see [docs/scenario-authoring.md](docs/scenario-authoring.md). `pnpm test` checks it against the contract and the balance targets.
+- The AI summary is optional and off without `GEMINI_API_KEY`. It only narrates results the engine already computed: every number in it must appear in the results, or it is discarded and the built-in debrief is shown alone. It is not saved to the database.

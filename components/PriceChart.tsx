@@ -38,6 +38,9 @@ export function PriceChart({
   const stroke = last >= open ? "var(--up)" : "var(--down)";
   const newsByTick = new Map(news.map((n) => [n.tick, n]));
   const maxTick = Math.max(totalTicks, data.length - 1);
+  // Narrow ranges need a decimal, or whole-credit labels repeat (e.g. 120, 121, 121, 122).
+  const prices = data.map((p) => p.price);
+  const axisDecimals = prices.length && Math.max(...prices) - Math.min(...prices) < 8 ? 1 : 0;
 
   return (
     <div style={{ height }} role="img" aria-label={`${symbol} price history, ${formatPct(((last - open) / (open || 1)) * 100)} since open`}>
@@ -59,7 +62,7 @@ export function PriceChart({
             tickLine={false}
             axisLine={false}
             width={48}
-            tickFormatter={(v: number) => v.toFixed(0)}
+            tickFormatter={(v: number) => v.toFixed(axisDecimals)}
           />
           <ReferenceLine y={open} stroke="var(--faint)" strokeDasharray="4 4" />
           {news.map((n) => (

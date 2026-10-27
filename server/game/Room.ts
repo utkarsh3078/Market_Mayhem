@@ -34,6 +34,7 @@ import {
   toHoldings,
   type Account,
 } from "../engine/portfolio";
+import { buildFactSheet, writeDebrief, type DebriefGenerator } from "../ai/debrief";
 import { noopPersistence, type Persistence } from "../persistence/types";
 import { publicScenarios, type ScenarioRegistry } from "../scenarios";
 import type { ScenarioConfig } from "../scenarios/types";
@@ -42,6 +43,12 @@ export interface RoomTimings {
   startingMs: number;
   tickMs: number;
   resolvingMs: number;
+}
+
+/** Optional AI round summary (U6). */
+export interface RoomDebrief {
+  generate: DebriefGenerator;
+  log: (message: string) => void;
 }
 
 export interface RoomEmitter {
@@ -116,6 +123,7 @@ export class Room {
     private readonly timings: RoomTimings,
     private readonly emitter: RoomEmitter,
     private readonly persistence: Persistence = noopPersistence,
+    private readonly debrief: RoomDebrief | null = null,
   ) {
     const scenario = registry.get(scenarioId);
     if (!scenario) throw new Error(`Unknown scenario: ${scenarioId}`);
@@ -329,14 +337,31 @@ export class Room {
     this.tick = this.history.NVE.length - 1;
     this.status = "FINISHED";
     this.phaseEndsAt = null;
-    this.results = this.buildResults();
+    const results: GameResults = this.debrief
+      ? { ...this.buildResults(), aiSummary: { status: "pending" } }
+      : this.buildResults();
+    this.results = results;
 
-    this.emitter.toRoom(this.code, S2C.GAME_FINISHED, this.results);
+    this.emitter.toRoom(this.code, S2C.GAME_FINISHED, results);
     this.broadcastState();
     for (const id of this.players.keys()) this.emitPlayerState(id);
     this.touch();
-    const results = this.results;
-    this.persist((p) => p.roundFinished(results.roundId, results));
+    // The saved copy leaves out the AI summary: it isn't final yet and only narrates these results.
+    const saved: GameResults = { roundId: results.roundId, leaderboard: results.leaderboard, reveal: results.reveal };
+    this.persist((p) => p.roundFinished(results.roundId, saved));
+    if (this.debrief) this.requestDebrief(this.debrief, results);
+  }
+
+  /** One call per finished round; the results above are already final and shown meanwhile. */
+  private requestDebrief(debrief: RoomDebrief, results: GameResults): void {
+    const trades = new Map([...this.players.values()].map((p) => [p.id, p.trades]));
+    const facts = buildFactSheet(this.scenario.name, results, trades);
+    void writeDebrief(debrief.generate, facts, debrief.log).then((text) => {
+      // Ignore a late answer if the host has already reset the room for another round.
+      if (this.status !== "FINISHED" || this.results?.roundId !== results.roundId) return;
+      this.results = { ...this.results, aiSummary: text ? { status: "ready", text } : { status: "unavailable" } };
+      this.broadcastState();
+    });
   }
 
   reset(requesterId: string): GameError | null {
