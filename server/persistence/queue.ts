@@ -45,9 +45,10 @@ export class WriteQueue {
   /** Resolves once every job queued so far has settled, or after timeoutMs. */
   async drain(timeoutMs = 5_000): Promise<void> {
     let timer: NodeJS.Timeout | undefined;
+    // Deliberately not unref()'d: the timer must keep the process alive so a shutdown really
+    // waits for pending writes (up to timeoutMs) instead of exiting with them unsettled.
     const timeout = new Promise<void>((resolve) => {
       timer = setTimeout(resolve, timeoutMs);
-      timer.unref();
     });
     await Promise.race([this.tail, timeout]);
     clearTimeout(timer);
