@@ -5,8 +5,9 @@ services:
     name: market-mayhem-server
     runtime: node
     plan: free # sleeps when idle: open /health ~10 minutes before a demo
-    # Applies database migrations only when DATABASE_URL is configured.
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && if [ -n "$DATABASE_URL" ]; then pnpm db:migrate; fi
+    # db:generate is explicit: pnpm skips postinstall when Render restores a cached node_modules.
+    # Migrations run only when DATABASE_URL is configured.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm db:generate && if [ -n "$DATABASE_URL" ]; then pnpm db:migrate; fi
     startCommand: pnpm start:server
     healthCheckPath: /health
     envVars:

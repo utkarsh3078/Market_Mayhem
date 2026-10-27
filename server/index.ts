@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createGameServer } from "./app";
+import { parseClientOrigins } from "./origins";
 import { noopPersistence, type Persistence } from "./persistence/types";
 
 // Load .env when present (local dev). Variables already set in the environment win.
@@ -27,19 +28,29 @@ const env = z
 
 const log = (message: string) => console.log(`[market-mayhem] ${message}`);
 
-const clientOrigins = env.CLIENT_ORIGIN?.split(",").map((o) => o.trim()).filter(Boolean);
-if (env.NODE_ENV === "production" && !clientOrigins?.length) {
+const clientOrigins = parseClientOrigins(env.CLIENT_ORIGIN);
+if (env.NODE_ENV === "production" && !clientOrigins.length) {
   console.error("[market-mayhem] CLIENT_ORIGIN must be set in production (comma-separated web app URLs).");
   process.exit(1);
 }
+log(`allowed origins: ${clientOrigins.length ? clientOrigins.join(", ") : "any (CLIENT_ORIGIN not set)"}`);
 
 async function main() {
   let persistence: Persistence = noopPersistence;
   if (env.DATABASE_URL) {
     // Loaded lazily so no database code runs (or needs generating) without DATABASE_URL.
-    const { createPrismaPersistence } = await import("./persistence/prisma");
-    persistence = createPrismaPersistence(env.DATABASE_URL, log, { caCert: env.DATABASE_CA_CERT || undefined });
-    log("persistence: PostgreSQL");
+    // A broken database setup must never stop the game, so fall back to memory if it can't load.
+    try {
+      const { createPrismaPersistence } = await import("./persistence/prisma");
+      persistence = createPrismaPersistence(env.DATABASE_URL, log, { caCert: env.DATABASE_CA_CERT || undefined });
+      log("persistence: PostgreSQL");
+    } catch (error) {
+      console.error(
+        "[market-mayhem] persistence DISABLED, running in memory only. Could not load the database client " +
+          "(run `pnpm db:generate`):",
+        error instanceof Error ? error.message.split("\n")[0] : error,
+      );
+    }
   } else {
     log("persistence: in memory only (DATABASE_URL not set)");
   }
