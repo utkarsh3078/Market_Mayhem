@@ -18,6 +18,7 @@ import {
 import type { Ack, ErrorCode, GameError, RoomState, Session } from "../shared/types";
 import { gameError, type Room, type RoomEmitter, type RoomTimings } from "./game/Room";
 import { RoomManager } from "./game/RoomManager";
+import { noopPersistence, type Persistence } from "./persistence/types";
 import { createRegistry, DEFAULT_SCENARIO_ID, SCENARIOS } from "./scenarios";
 import type { ScenarioConfig } from "./scenarios/types";
 
@@ -29,6 +30,8 @@ export interface GameServerOptions {
   scenarios?: ScenarioConfig[];
   /** Scenario a new room starts with; defaults to the first of `scenarios`, or energy-shock. */
   defaultScenarioId?: string;
+  /** Optional durable storage; defaults to in-memory only. */
+  persistence?: Persistence;
   log?: (message: string) => void;
 }
 
@@ -80,7 +83,8 @@ export function createGameServer(options: GameServerOptions): {
   const defaultScenarioId =
     options.defaultScenarioId ?? (options.scenarios ? options.scenarios[0].id : DEFAULT_SCENARIO_ID);
   if (!registry.has(defaultScenarioId)) throw new Error(`Unknown default scenario: ${defaultScenarioId}`);
-  const rooms = new RoomManager(registry, defaultScenarioId, options.timings, emitter);
+  const persistence = options.persistence ?? noopPersistence;
+  const rooms = new RoomManager(registry, defaultScenarioId, options.timings, emitter, persistence);
   const sessions = new Map<string, SessionRecord>();
 
   // ---------- HTTP ----------
@@ -100,10 +104,16 @@ export function createGameServer(options: GameServerOptions): {
     res.json({ room: room.publicState() });
   });
 
-  app.get("/api/rooms/:code/results", (req, res) => {
+  app.get("/api/rooms/:code/results", async (req, res) => {
     const code = roomCodeSchema.safeParse(req.params.code);
-    const room = code.success ? rooms.get(code.data) : undefined;
-    if (!room) return res.status(404).json({ error: gameError("ROOM_NOT_FOUND") });
+    if (!code.success) return res.status(404).json({ error: gameError("ROOM_NOT_FOUND") });
+    const room = rooms.get(code.data);
+    if (!room) {
+      // The room has left memory (idle sweep or restart): fall back to the last saved round.
+      const stored = await persistence.findResults(code.data).catch(() => null);
+      if (stored) return res.json({ results: stored });
+      return res.status(404).json({ error: gameError("ROOM_NOT_FOUND") });
+    }
     const { results } = room.publicState();
     if (!results) return res.status(409).json({ error: gameError("ROUND_IN_PROGRESS") });
     res.json({ results });
@@ -305,6 +315,7 @@ export function createGameServer(options: GameServerOptions): {
     close: async () => {
       rooms.close();
       await io.close();
+      await persistence.close();
     },
   };
 }

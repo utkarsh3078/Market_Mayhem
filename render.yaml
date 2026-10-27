@@ -5,7 +5,8 @@ services:
     name: market-mayhem-server
     runtime: node
     plan: free # sleeps when idle: open /health ~10 minutes before a demo
-    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    # Applies database migrations only when DATABASE_URL is configured.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && if [ -n "$DATABASE_URL" ]; then pnpm db:migrate; fi
     startCommand: pnpm start:server
     healthCheckPath: /health
     envVars:
@@ -17,6 +18,9 @@ services:
       # The server refuses to start in production without it.
       - key: CLIENT_ORIGIN
         sync: false
-      # Optional. When set, finished rounds are saved to PostgreSQL.
+      # Optional. Supabase "Session pooler" URL; when set, rounds/trades/results are saved.
       - key: DATABASE_URL
+        sync: false
+      # Recommended with Supabase: its CA certificate (PEM) for verified TLS.
+      - key: DATABASE_CA_CERT
         sync: false

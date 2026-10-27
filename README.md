@@ -90,6 +90,9 @@ See `.env.example`.
 | `NEXT_PUBLIC_SERVER_URL` | Game server URL used by the browser |
 | `NODE_ENV` | development / production |
 | `TICK_MS`, `STARTING_MS`, `RESOLVING_MS` | Round pacing |
+| `DATABASE_URL` | Optional PostgreSQL URL (Supabase session pooler). Unset = in memory only. |
+| `DATABASE_CA_CERT` | Optional PEM CA certificate for verified TLS to the database (Supabase's). |
+| `DIRECT_URL` | Optional URL for migrations only, when `DATABASE_URL` is a transaction pooler. |
 
 ## Deploying
 
@@ -100,6 +103,18 @@ Two pieces: the Next.js web app on Vercel, and the game server on a host that ke
 1. Render → **New → Blueprint**, pick this repository. `render.yaml` creates the `market-mayhem-server` web service (build `pnpm install`, start `pnpm start:server`, health check `/health`).
 2. Set `CLIENT_ORIGIN` to the web app URL from step 2 (comma-separate several, such as a preview and production URL). In production the server refuses to start without it, and it rejects WebSocket connections from any other origin.
 3. Open `https://<service>.onrender.com/health`. It should return `{"ok":true,...}`.
+
+**Optional: database on Supabase**
+
+Without a database the server runs in memory, which is fine for a demo. With one, every round, trade and result is saved, and `GET /api/rooms/:code/results` still works after a room has left memory or the server has restarted.
+
+1. Create a Supabase project. In **Connect**, copy the **Session pooler** connection string and fill in your database password. (The direct `db.<ref>.supabase.co` host is IPv6-only on the free plan, which Render can't reach.)
+2. In **Database settings → SSL Configuration**, download the CA certificate.
+3. Locally: put `DATABASE_URL` (and optionally `DATABASE_CA_CERT`) in `.env`, then run `pnpm db:migrate`. It creates the tables and enables row-level security so Supabase's public Data API can't read them. The game server connects as the table owner, which RLS doesn't restrict.
+4. On Render: set `DATABASE_URL` and `DATABASE_CA_CERT`. The build runs `pnpm db:migrate` whenever `DATABASE_URL` is set.
+5. Check: play a round, then open **Table Editor** in Supabase. `GameRoom`, `Trade` and `GameResult` should have rows.
+
+If the database goes down, the game keeps running and only logs the failed writes. Writes are queued in the background and never awaited inside a round. Using Supabase's transaction pooler (port 6543) instead? Also set `DIRECT_URL` to the session pooler URL for migrations.
 
 **2. Web app on Vercel**
 
@@ -116,6 +131,6 @@ Two pieces: the Next.js web app on Vercel, and the game server on a host that ke
 
 ## Known demo limits
 
-- State is in memory. A server restart ends active rooms. PostgreSQL/Prisma persistence is the next step, and the `Room` class is the single place to add it.
+- Rounds in progress live in memory, so a server restart ends them. Finished rounds, trades and results are saved when `DATABASE_URL` is set (see "Optional: database on Supabase").
 - One scenario so far ("The Energy Shock"). The host picks from every registered scenario in the lobby; see [docs/scenario-authoring.md](docs/scenario-authoring.md) to add one.
 - There is no AI. When AI explanations are added, they should only narrate results the engine already computed.
