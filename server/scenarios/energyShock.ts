@@ -1,4 +1,4 @@
-import type { ScenarioConfig } from "./types";
+import type { BalanceHints, ScenarioConfig } from "./types";
 
 // Server-only: this file contains the hidden truth and must never be imported by the web app.
 //
@@ -9,26 +9,29 @@ import type { ScenarioConfig } from "./types";
 
 export const energyShock: ScenarioConfig = {
   id: "energy-shock",
-  version: 1,
+  version: 2,
   name: "The Energy Shock",
   teaser: "Shipping lanes are jammed and everyone is talking about shortages. Is it real?",
   seed: "energy-shock-demo-v1",
   totalTicks: 90,
   noise: 0.004,
   marketNoise: 0.0015,
+  // v2 (balance pass): good news now moves prices mostly *before* its headline, so chasing headlines
+  // no longer beats acting on a private clue; the shortage spike peaks soon after the headline.
   events: [
     {
       id: "shipping-delay",
-      startTick: 6,
-      endTick: 40,
-      perTick: { NVE: 0.006, QTM: -0.0015, AGR: -0.0025, CLD: -0.0003 },
+      startTick: 4,
+      endTick: 14,
+      perTick: { NVE: 0.007, QTM: -0.0015, AGR: -0.0025, CLD: -0.0003 },
     },
-    { id: "cloud-contract", startTick: 22, endTick: 34, perTick: { CLD: 0.004 } },
+    { id: "cloud-leak", startTick: 12, endTick: 22, perTick: { CLD: 0.004 } },
+    { id: "quiet-relief", startTick: 16, endTick: 44, perTick: { NVE: -0.003, CLD: -0.0003 } },
     { id: "bank-buzz", startTick: 30, endTick: 38, perTick: { MTB: -0.003 } },
-    { id: "route-reopens", startTick: 45, endTick: 70, perTick: { NVE: -0.0045, AGR: 0.0008 } },
+    { id: "route-reopens", startTick: 45, endTick: 70, perTick: { NVE: -0.002, AGR: 0.0008 } },
     { id: "bank-stable", startTick: 48, endTick: 70, perTick: { MTB: 0.0012 } },
     { id: "factory-energy", startTick: 62, endTick: 80, perTick: { QTM: -0.0035, NVE: 0.0005 } },
-    { id: "harvest-upgrade", startTick: 75, endTick: 90, perTick: { AGR: 0.003 } },
+    { id: "harvest-leak", startTick: 55, endTick: 75, perTick: { AGR: 0.003 } },
   ],
   news: [
     {
@@ -140,11 +143,11 @@ export const energyShock: ScenarioConfig = {
     headline: "The shortage never came",
     summary:
       "The shipping disruption was temporary: a backup route was secured almost immediately. Energy prices spiked on fear, then reversed. The real damage landed on heavy energy users, while the bank rumor turned out to be false.",
-    shock: { NVE: -0.07, QTM: -0.05, AGR: 0.06, CLD: 0.02, MTB: 0.03 },
+    shock: { NVE: -0.05, QTM: -0.05, AGR: 0.03, CLD: 0.03, MTB: 0.03 },
     explanations: {
-      NVE: "Rallied hard on the shortage headline, then gave most of it back once the backup route was public. Buying after the headline meant buying near the top.",
-      CLD: "The contract was real but modest. Most of the upside arrived with the headline; the final report confirmed only a small gain.",
-      AGR: "Fell on transport fears, but the harvest was strong. Players who looked past the short-term headline bought the dip.",
+      NVE: "Spiked on the shortage headline, then gave it all back as word of the backup route spread. Buying after the headline meant buying near the top.",
+      CLD: "The contract was real but modest. The upside came before the announcement as word leaked, then faded. Buying on the headline meant buying the top of a small move.",
+      AGR: "Fell on transport fears, but the harvest was strong. Informed buyers moved first, so by the time the upgrade was public most of the gain had already happened.",
       QTM: "Quantum Motors was the industrial customer exposed to energy costs. The cost hit was persistent, not temporary.",
       MTB: "The bad-loan rumor was false. The bank's quarterly report was clean, and the stock recovered its brief dip.",
     },
@@ -154,5 +157,22 @@ export const energyShock: ScenarioConfig = {
       "Private information varies in quality. A low-confidence rumor deserves less weight than a verified memo.",
       "Second-order effects (who pays the higher energy bill?) can matter more than the headline itself.",
     ],
+  },
+};
+
+/** What each clue and headline suggests; used only by the balance simulator. */
+export const energyShockHints: BalanceHints = {
+  clues: {
+    "backup-route": { symbol: "NVE", action: "AVOID" },
+    "energy-exposure": { symbol: "QTM", action: "AVOID" },
+    "strong-harvest": { symbol: "AGR", action: "BUY" },
+    "bank-rumor": { symbol: "MTB", action: "AVOID" },
+    "contract-size": { symbol: "CLD", action: "BUY" },
+  },
+  praises: {
+    "n-shipping": "NVE",
+    "n-cloud": "CLD",
+    "n-bank-stable": "MTB",
+    "n-harvest": "AGR",
   },
 };

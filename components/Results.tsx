@@ -78,6 +78,23 @@ export function Results({ state, actions }: { state: GameState; actions: GameAct
         </Panel>
       </section>
 
+      {/* Optional AI recap: only narrates the results below, and is hidden if unavailable. */}
+      {results.aiSummary && results.aiSummary.status !== "unavailable" && (
+        <Panel
+          title="AI-written summary"
+          action={<span className="text-xs text-faint">Narrates the results below</span>}
+          className="p-0"
+        >
+          <div className="px-5 py-4" aria-live="polite">
+            {results.aiSummary.status === "pending" ? (
+              <p className="animate-pulse text-sm text-faint">Writing a short summary of the round…</p>
+            ) : (
+              <p className="text-sm leading-relaxed whitespace-pre-line">{results.aiSummary.text}</p>
+            )}
+          </div>
+        </Panel>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         {/* Leaderboard with "who knew what" */}
         <Panel title="Final ranking · who knew what">

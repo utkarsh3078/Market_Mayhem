@@ -5,3 +5,6 @@ allowBuilds:
   # Prisma's install scripts only pre-download engines; generate/migrate work without them.
   "@prisma/engines": false
   prisma: false
+  # Gemini SDK: its preinstall is a no-op echo; protobufjs' postinstall only prints a version warning.
+  "@google/genai": false
+  protobufjs: false

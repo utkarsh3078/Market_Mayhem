@@ -40,6 +40,33 @@ The underlying path is fully determined by the scenario seed. The same seed alwa
 - **Private clues** are dealt in join order from the scenario's clue list, so every player gets a different one (clues repeat when there are more than 5 players). Each clue has a confidence level. Some are reliable and one is a false rumor. No clue reveals the whole outcome.
 - All clues are revealed on the results screen.
 
-## Scenario: The Energy Shock
+## Scenarios
 
-A shipping disruption makes everyone fear an energy shortage. The scenario file `server/scenarios/energyShock.ts` defines the hidden truth, events, news, clues and debrief. It is server-only and never ships to the browser.
+The host picks one in the lobby. Each scenario file in `server/scenarios/` defines the hidden truth, the market events, the news, the five clues and the debrief. Scenario files are server-only and never ship to the browser; before a round, players only see a scenario's name and teaser.
+
+| Scenario | Setup | Lesson |
+| --- | --- | --- |
+| The Energy Shock | A shipping disruption makes everyone fear an energy shortage. | A temporary shock and a lasting change look the same on day one. |
+| The Rate Shock | Economists whisper about a steep interest-rate hike. | One event can push different sectors in opposite directions. |
+| The Cloud Breach | CloudForge reports a security incident and the headlines are frightening. | Scary headlines move prices before the facts arrive. |
+| The Battery Hype | Quantum Motors teases a battery breakthrough. | Hype against fundamentals: buy the rumor, sell the news. |
+
+### Balance
+
+Each scenario is tuned so that the private clue matters without guaranteeing a win. `pnpm balance` plays every scenario with three fixed strategies on its real price path:
+
+- **Holder:** never trades.
+- **Headline chaser:** two ticks after any headline praises a company, moves everything into it.
+- **Clue follower:** acts once at the open on their own clue only (buying, or staying in cash when the clue is bearish, since there is no short selling).
+
+The targets, checked by `pnpm test` on the demo seed and on alternative seeds:
+
+- Clue followers beat the holder on average.
+- Following the HIGH-confidence clue pays.
+- The headline chaser is not the best strategy.
+- The holder never wins outright.
+- The LOW-confidence rumor never beats the HIGH clue.
+
+## After the round
+
+The results screen ranks every player, reveals each player's clue ("who knew what"), and explains how each company moved and why. If the server has a Gemini key, a short AI-written summary also appears. It only narrates these results: it can't change prices or scores, and it is discarded if it quotes any number that isn't in the results.

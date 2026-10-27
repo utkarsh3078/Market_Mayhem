@@ -18,6 +18,7 @@ import {
 import type { Ack, ErrorCode, GameError, RoomState, Session } from "../shared/types";
 import { gameError, type Room, type RoomEmitter, type RoomTimings } from "./game/Room";
 import { RoomManager } from "./game/RoomManager";
+import type { DebriefGenerator } from "./ai/debrief";
 import { noopPersistence, type Persistence } from "./persistence/types";
 import { createRegistry, DEFAULT_SCENARIO_ID, SCENARIOS } from "./scenarios";
 import type { ScenarioConfig } from "./scenarios/types";
@@ -32,6 +33,8 @@ export interface GameServerOptions {
   defaultScenarioId?: string;
   /** Optional durable storage; defaults to in-memory only. */
   persistence?: Persistence;
+  /** Optional AI round summary (U6); off when absent. */
+  debrief?: DebriefGenerator;
   log?: (message: string) => void;
 }
 
@@ -84,7 +87,8 @@ export function createGameServer(options: GameServerOptions): {
     options.defaultScenarioId ?? (options.scenarios ? options.scenarios[0].id : DEFAULT_SCENARIO_ID);
   if (!registry.has(defaultScenarioId)) throw new Error(`Unknown default scenario: ${defaultScenarioId}`);
   const persistence = options.persistence ?? noopPersistence;
-  const rooms = new RoomManager(registry, defaultScenarioId, options.timings, emitter, persistence);
+  const debrief = options.debrief ? { generate: options.debrief, log } : null;
+  const rooms = new RoomManager(registry, defaultScenarioId, options.timings, emitter, persistence, debrief);
   const sessions = new Map<string, SessionRecord>();
 
   // ---------- HTTP ----------

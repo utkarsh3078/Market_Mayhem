@@ -25,3 +25,6 @@ services:
       # Recommended with Supabase: its CA certificate (PEM) for verified TLS.
       - key: DATABASE_CA_CERT
         sync: false
+      # Optional. Enables the Gemini-written round summary (one short call per round).
+      - key: GEMINI_API_KEY
+        sync: false
