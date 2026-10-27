@@ -19,6 +19,8 @@ export interface Persistence {
   roundFinished(roundId: string, results: GameResults): void;
   /** Latest finished round's results for a room code, or null. Used once a room has left memory. */
   findResults(code: string): Promise<GameResults | null>;
+  /** When rounds finished since `since` (ms timestamps), or [] on failure. Restores the AI quota's daily count after a restart. */
+  roundsFinishedSince(since: Date): Promise<number[]>;
   /** Flush queued writes (bounded by timeoutMs) and release connections. */
   close(timeoutMs?: number): Promise<void>;
 }
@@ -29,5 +31,6 @@ export const noopPersistence: Persistence = {
   tradeExecuted: () => {},
   roundFinished: () => {},
   findResults: async () => null,
+  roundsFinishedSince: async () => [],
   close: async () => {},
 };

@@ -19,6 +19,23 @@ export function createPrismaPersistence(
   const prisma = new PrismaClient({ adapter, errorFormat: "minimal" });
   const queue = new WriteQueue(log);
 
+  /** A read that resolves to `fallback` (logged) on failure, or after READ_TIMEOUT_MS. */
+  async function read<T>(name: string, fallback: T, query: Promise<T>): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<T>((resolve) => {
+      timer = setTimeout(() => resolve(fallback), READ_TIMEOUT_MS);
+    });
+    const safe = query.catch((error: unknown) => {
+      log(`persistence ${name} failed: ${describeError(error)}`);
+      return fallback;
+    });
+    try {
+      return await Promise.race([safe, timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   return {
     roundStarted(r) {
       queue.push(`roundStarted ${r.roundId}`, () =>
@@ -98,27 +115,28 @@ export function createPrismaPersistence(
       );
     },
 
-    async findResults(code) {
-      let timer: NodeJS.Timeout | undefined;
-      const timeout = new Promise<null>((resolve) => {
-        timer = setTimeout(() => resolve(null), READ_TIMEOUT_MS);
-      });
-      const query = prisma.gameRoom
-        .findFirst({
-          where: { code, status: "FINISHED" },
-          orderBy: { finishedAt: "desc" },
-          select: { results: true },
-        })
-        .then((row) => (row?.results as unknown as GameResults | null) ?? null)
-        .catch((error: unknown) => {
-          log(`persistence findResults failed: ${describeError(error)}`);
-          return null;
-        });
-      try {
-        return await Promise.race([query, timeout]);
-      } finally {
-        clearTimeout(timer);
-      }
+    findResults(code) {
+      return read(
+        "findResults",
+        null,
+        prisma.gameRoom
+          .findFirst({
+            where: { code, status: "FINISHED" },
+            orderBy: { finishedAt: "desc" },
+            select: { results: true },
+          })
+          .then((row) => (row?.results as unknown as GameResults | null) ?? null),
+      );
+    },
+
+    roundsFinishedSince(since) {
+      return read(
+        "roundsFinishedSince",
+        [],
+        prisma.gameRoom
+          .findMany({ where: { finishedAt: { gt: since } }, select: { finishedAt: true } })
+          .then((rows) => rows.map((r) => r.finishedAt!.getTime())),
+      );
     },
 
     async close(timeoutMs = 5_000) {

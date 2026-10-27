@@ -124,6 +124,7 @@ describe("persistence in the game loop", () => {
       tradeExecuted: boom,
       roundFinished: boom,
       findResults: async () => boom(),
+      roundsFinishedSince: async () => [],
       close: async () => {},
     });
     const { trade, results } = await playRound(url);
@@ -141,6 +142,7 @@ describe("persistence in the game loop", () => {
       tradeExecuted: failing,
       roundFinished: failing,
       findResults: async () => null,
+      roundsFinishedSince: async () => [],
       close: () => queue.drain(),
     });
     const { trade, results } = await playRound(url);
@@ -159,6 +161,7 @@ describe("persistence in the game loop", () => {
       tradeExecuted: (roundId, playerId, trade) => trades.push({ roundId, playerId, trade }),
       roundFinished: (roundId, results) => finished.push({ roundId, results }),
       findResults: async () => null,
+      roundsFinishedSince: async () => [],
       close: async () => {},
     });
     const { code, trade, results } = await playRound(url);
@@ -189,6 +192,7 @@ describe("GET /api/rooms/:code/results", () => {
       tradeExecuted: () => {},
       roundFinished: () => {},
       findResults: async (code) => (code === "QQQQQ" ? stored : null),
+      roundsFinishedSince: async () => [],
       close: async () => {},
     });
     const hit = await fetch(`${url}/api/rooms/qqqqq/results`);
@@ -207,6 +211,7 @@ describe("GET /api/rooms/:code/results", () => {
       findResults: async () => {
         throw new Error("db down");
       },
+      roundsFinishedSince: async () => [],
       close: async () => {},
     });
     assert.equal((await fetch(`${url}/api/rooms/QQQQQ/results`)).status, 404);
