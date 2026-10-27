@@ -1,5 +1,13 @@
 import { z } from "zod";
 import { createGameServer } from "./app";
+import { noopPersistence, type Persistence } from "./persistence/types";
+
+// Load .env when present (local dev). Variables already set in the environment win.
+try {
+  process.loadEnvFile();
+} catch {
+  // No .env file (CI, hosting): use the real environment only.
+}
 
 const env = z
   .object({
@@ -10,8 +18,14 @@ const env = z
     TICK_MS: z.coerce.number().int().min(10).default(2000),
     STARTING_MS: z.coerce.number().int().min(0).default(10_000),
     RESOLVING_MS: z.coerce.number().int().min(0).default(4_000),
+    /** Optional PostgreSQL URL. Without it the server runs purely in memory. */
+    DATABASE_URL: z.url().optional().or(z.literal("").transform(() => undefined)),
+    /** Optional PEM CA certificate for verifying the database's TLS certificate (e.g. Supabase's). */
+    DATABASE_CA_CERT: z.string().optional(),
   })
   .parse(process.env);
+
+const log = (message: string) => console.log(`[market-mayhem] ${message}`);
 
 const clientOrigins = env.CLIENT_ORIGIN?.split(",").map((o) => o.trim()).filter(Boolean);
 if (env.NODE_ENV === "production" && !clientOrigins?.length) {
@@ -19,18 +33,36 @@ if (env.NODE_ENV === "production" && !clientOrigins?.length) {
   process.exit(1);
 }
 
-const server = createGameServer({
-  clientOrigins,
-  timings: { startingMs: env.STARTING_MS, tickMs: env.TICK_MS, resolvingMs: env.RESOLVING_MS },
-  log: (message) => console.log(`[market-mayhem] ${message}`),
-});
+async function main() {
+  let persistence: Persistence = noopPersistence;
+  if (env.DATABASE_URL) {
+    // Loaded lazily so no database code runs (or needs generating) without DATABASE_URL.
+    const { createPrismaPersistence } = await import("./persistence/prisma");
+    persistence = createPrismaPersistence(env.DATABASE_URL, log, { caCert: env.DATABASE_CA_CERT || undefined });
+    log("persistence: PostgreSQL");
+  } else {
+    log("persistence: in memory only (DATABASE_URL not set)");
+  }
 
-server.httpServer.listen(env.PORT, () => {
-  console.log(`[market-mayhem] game server listening on http://localhost:${env.PORT}`);
-});
+  const server = createGameServer({
+    clientOrigins,
+    timings: { startingMs: env.STARTING_MS, tickMs: env.TICK_MS, resolvingMs: env.RESOLVING_MS },
+    persistence,
+    log,
+  });
 
-const shutdown = () => {
-  server.close().finally(() => process.exit(0));
-};
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+  server.httpServer.listen(env.PORT, () => {
+    log(`game server listening on http://localhost:${env.PORT}`);
+  });
+
+  const shutdown = () => {
+    server.close().finally(() => process.exit(0));
+  };
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+}
+
+main().catch((error: unknown) => {
+  console.error("[market-mayhem] failed to start", error);
+  process.exit(1);
+});

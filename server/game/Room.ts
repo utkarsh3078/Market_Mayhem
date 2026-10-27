@@ -34,6 +34,7 @@ import {
   toHoldings,
   type Account,
 } from "../engine/portfolio";
+import { noopPersistence, type Persistence } from "../persistence/types";
 import { publicScenarios, type ScenarioRegistry } from "../scenarios";
 import type { ScenarioConfig } from "../scenarios/types";
 
@@ -114,6 +115,7 @@ export class Room {
     scenarioId: string,
     private readonly timings: RoomTimings,
     private readonly emitter: RoomEmitter,
+    private readonly persistence: Persistence = noopPersistence,
   ) {
     const scenario = registry.get(scenarioId);
     if (!scenario) throw new Error(`Unknown scenario: ${scenarioId}`);
@@ -230,7 +232,8 @@ export class Room {
     }
 
     this.status = "STARTING";
-    this.roundId = randomUUID();
+    const roundId = randomUUID();
+    this.roundId = roundId;
     this.path = generatePricePath(this.scenario);
     this.tick = 0;
     this.impact = this.zeroed();
@@ -265,6 +268,21 @@ export class Room {
     }
     this.timeout = setTimeout(() => this.openTrading(), this.timings.startingMs);
     this.touch();
+    this.persist((p) =>
+      p.roundStarted({
+        roundId,
+        code: this.code,
+        scenarioId: this.scenario.id,
+        scenarioVersion: this.scenario.version,
+        seed: this.scenario.seed,
+        players: ordered.map((pl) => ({
+          id: pl.id,
+          displayName: pl.displayName,
+          joinOrder: pl.joinOrder,
+          clueId: pl.clue?.id ?? null,
+        })),
+      }),
+    );
     return null;
   }
 
@@ -317,6 +335,8 @@ export class Room {
     this.broadcastState();
     for (const id of this.players.keys()) this.emitPlayerState(id);
     this.touch();
+    const results = this.results;
+    this.persist((p) => p.roundFinished(results.roundId, results));
   }
 
   reset(requesterId: string): GameError | null {
@@ -394,6 +414,8 @@ export class Room {
     };
     player.trades.unshift(trade);
     this.touch();
+    const roundId = this.roundId!;
+    this.persist((p) => p.tradeExecuted(roundId, playerId, trade));
 
     this.emitMarketUpdate();
     const state = this.privateState(playerId);
@@ -466,6 +488,15 @@ export class Room {
   }
 
   // ---------- internals ----------
+
+  /** Hand a write to persistence after the in-memory commit. Never lets it affect the round. */
+  private persist(write: (p: Persistence) => void): void {
+    try {
+      write(this.persistence);
+    } catch {
+      // Persistence is best-effort; its own queue logs failures.
+    }
+  }
 
   private touch(): void {
     this.lastActivity = Date.now();

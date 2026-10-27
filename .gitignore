@@ -48,6 +48,9 @@ next-env.d.ts
 # server build output
 /dist
 
+# generated Prisma client (pnpm install runs prisma generate)
+/server/generated/
+
 DESIGN.md
 Market_Mayhem_Execution_Plan.pdf
 AGENTS.md

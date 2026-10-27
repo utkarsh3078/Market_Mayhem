@@ -1,0 +1,101 @@
+// Persistence for finished and in-progress rounds. In-memory state in server/game/Room.ts stays
+// authoritative during a round; these tables are written asynchronously after each in-memory commit.
+// Money is integer cents throughout.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../server/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum RoundStatus {
+  ACTIVE
+  FINISHED
+}
+
+enum TradeSide {
+  BUY
+  SELL
+}
+
+/// A guest identity (server-issued player id). Display names can change between rounds.
+model Player {
+  id          String       @id @db.Uuid
+  displayName String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  rounds      RoomPlayer[]
+  trades      Trade[]
+  results     GameResult[]
+}
+
+/// One row per round. Room codes are reused across rounds, so the round id is the key.
+model GameRoom {
+  id              String       @id @db.Uuid
+  code            String
+  scenarioId      String
+  scenarioVersion Int
+  seed            String
+  status          RoundStatus  @default(ACTIVE)
+  startedAt       DateTime     @default(now())
+  finishedAt      DateTime?
+  /// The full GameResults payload, served by GET /api/rooms/:code/results after the room leaves memory.
+  results         Json?
+  players         RoomPlayer[]
+  trades          Trade[]
+  gameResults     GameResult[]
+
+  @@index([code, finishedAt])
+}
+
+model RoomPlayer {
+  id          String   @id @default(uuid()) @db.Uuid
+  roomId      String   @db.Uuid
+  playerId    String   @db.Uuid
+  displayName String
+  joinOrder   Int
+  clueId      String?
+  room        GameRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, playerId])
+}
+
+model Trade {
+  id        String    @id @db.Uuid
+  roomId    String    @db.Uuid
+  playerId  String    @db.Uuid
+  requestId String
+  symbol    String
+  side      TradeSide
+  quantity  Int
+  price     Int
+  fee       Int
+  total     Int
+  tick      Int
+  createdAt DateTime
+  room      GameRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  player    Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, playerId, requestId])
+  @@index([roomId])
+}
+
+model GameResult {
+  id             String   @id @default(uuid()) @db.Uuid
+  roomId         String   @db.Uuid
+  playerId       String   @db.Uuid
+  rank           Int
+  portfolioValue Int
+  pnl            Int
+  returnPct      Float
+  tradeCount     Int
+  room           GameRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  player         Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, playerId])
+}

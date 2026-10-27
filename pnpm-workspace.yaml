@@ -2,3 +2,6 @@ allowBuilds:
   esbuild: false
   sharp: false
   unrs-resolver: false
+  # Prisma's install scripts only pre-download engines; generate/migrate work without them.
+  "@prisma/engines": false
+  prisma: false

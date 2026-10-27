@@ -1,5 +1,6 @@
 import { randomInt } from "node:crypto";
 import { ROOM_CODE_LENGTH } from "../../shared/rules";
+import type { Persistence } from "../persistence/types";
 import type { ScenarioRegistry } from "../scenarios";
 import { Room, type RoomEmitter, type RoomTimings } from "./Room";
 
@@ -16,6 +17,7 @@ export class RoomManager {
     private readonly defaultScenarioId: string,
     private readonly timings: RoomTimings,
     private readonly emitter: RoomEmitter,
+    private readonly persistence: Persistence,
   ) {
     this.sweeper = setInterval(() => this.sweep(), 60_000);
     this.sweeper.unref();
@@ -34,6 +36,7 @@ export class RoomManager {
       this.defaultScenarioId,
       this.timings,
       this.emitter,
+      this.persistence,
     );
     this.rooms.set(code, room);
     return room;
