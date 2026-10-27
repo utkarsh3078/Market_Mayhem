@@ -12,6 +12,7 @@ import type {
   TradeResultPayload,
 } from "../../shared/types";
 import { createGameServer } from "../app";
+import { parseClientOrigins } from "../origins";
 
 // A full round over real sockets with compressed timings (90 ticks × 15ms).
 const server = createGameServer({ timings: { startingMs: 150, tickMs: 15, resolvingMs: 50 } });
@@ -263,5 +264,16 @@ describe("allowed origins", () => {
     assert.equal(good.headers.get("access-control-allow-origin"), "https://play.example");
     const bad = await fetch(`${lockedUrl}/health`, { headers: { Origin: "https://evil.example" } });
     assert.equal(bad.headers.get("access-control-allow-origin"), null);
+  });
+});
+
+describe("parseClientOrigins", () => {
+  it("normalises entries to the exact origin a browser sends", () => {
+    assert.deepEqual(
+      parseClientOrigins(" https://play.example/ , https://Preview-123.vercel.app/some/path,http://localhost:3000,https://play.example"),
+      ["https://play.example", "https://preview-123.vercel.app", "http://localhost:3000"],
+    );
+    assert.deepEqual(parseClientOrigins(undefined), []);
+    assert.deepEqual(parseClientOrigins(" , "), []);
   });
 });
