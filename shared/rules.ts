@@ -6,6 +6,7 @@ export const MAX_PLAYERS_PER_ROOM = 8;
 export const FEE_BPS = 10; // 0.10% fee on every trade
 export const MAX_DISPLAY_NAME = 20;
 export const ROOM_CODE_LENGTH = 5;
+export const MAX_THEME_LENGTH = 80;
 
 /** Fee in cents for a given notional (cents). */
 export function tradeFee(notional: number): number {

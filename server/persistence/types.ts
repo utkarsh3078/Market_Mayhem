@@ -1,4 +1,5 @@
 import type { GameResults, TradeRecord } from "../../shared/types";
+import type { ScenarioConfig } from "../scenarios/types";
 
 export interface RoundStartRecord {
   roundId: string;
@@ -6,6 +7,8 @@ export interface RoundStartRecord {
   scenarioId: string;
   scenarioVersion: number;
   seed: string;
+  /** Full scenario for AI-written rounds, so they can be replayed. Absent for built-in scenarios. */
+  scenarioConfig?: ScenarioConfig;
   players: { id: string; displayName: string; joinOrder: number; clueId: string | null }[];
 }
 

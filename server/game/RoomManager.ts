@@ -1,5 +1,6 @@
 import { randomInt } from "node:crypto";
 import { ROOM_CODE_LENGTH } from "../../shared/rules";
+import { noAiScenarios, type AiScenarios } from "../ai/services";
 import type { Persistence } from "../persistence/types";
 import type { ScenarioRegistry } from "../scenarios";
 import { Room, type RoomDebrief, type RoomEmitter, type RoomTimings } from "./Room";
@@ -19,6 +20,7 @@ export class RoomManager {
     private readonly emitter: RoomEmitter,
     private readonly persistence: Persistence,
     private readonly debrief: RoomDebrief | null = null,
+    private readonly ai: AiScenarios = noAiScenarios,
   ) {
     this.sweeper = setInterval(() => this.sweep(), 60_000);
     this.sweeper.unref();
@@ -39,6 +41,7 @@ export class RoomManager {
       this.emitter,
       this.persistence,
       this.debrief,
+      this.ai,
     );
     this.rooms.set(code, room);
     return room;

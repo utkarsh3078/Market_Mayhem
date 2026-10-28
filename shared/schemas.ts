@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ASSET_SYMBOLS } from "./assets";
-import { MAX_DISPLAY_NAME, MAX_ORDER_QUANTITY, ROOM_CODE_LENGTH } from "./rules";
+import { MAX_DISPLAY_NAME, MAX_ORDER_QUANTITY, MAX_THEME_LENGTH, ROOM_CODE_LENGTH } from "./rules";
 
 export const displayNameSchema = z
   .string()
@@ -25,7 +25,9 @@ export const playerReadySchema = z.object({ ready: z.boolean() });
 
 export const scenarioIdSchema = z.string().trim().min(1).max(64);
 
-export const scenarioSelectSchema = z.object({ scenarioId: scenarioIdSchema });
+export const themeSchema = z.string().trim().max(MAX_THEME_LENGTH);
+
+export const scenarioSelectSchema = z.object({ scenarioId: scenarioIdSchema, theme: themeSchema.optional() });
 
 export const gameStartSchema = z.object({ scenarioId: scenarioIdSchema.optional() });
 

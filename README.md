@@ -10,7 +10,7 @@ Players trade five fictional assets with virtual credits, react to public headli
 
 ## How to play
 
-1. **Open a room.** Enter a name, create a room, and share the 5-letter code (or the invite link). Everyone starts with 100,000 virtual credits. The host picks one of four scenarios.
+1. **Open a room.** Enter a name, create a room, and share the 5-letter code (or the invite link). Everyone starts with 100,000 virtual credits. The host picks one of four built-in scenarios, or an **AI Scenario** that Gemma 4 writes fresh for the round (when an AI key is set).
 2. **Read the news, guard your clue.** Headlines reach everyone at once. You also get a private clue that nobody else sees, and it might be wrong: check its confidence level.
 3. **Trade before the bell.** Buy and sell five fictional companies. When the timer ends, the hidden event resolves, final prices are applied, and the highest portfolio value wins. The results screen reveals every player's clue and explains what really happened.
 
@@ -84,7 +84,7 @@ server/
   scenarios/              Scenario configs (hidden truth) and balance hints. Server-only.
   balance/                Automated balance play-tests (`pnpm balance`)
   persistence/            Optional PostgreSQL (Prisma) write queue
-  ai/                     Optional Gemini round summary (narrates computed results only)
+  ai/                     Optional Gemma 4: AI-written scenarios (checked by the contract and the balance simulator) and the round summary (narrates computed results only)
   test/                   node:test suites
 docs/game-rules.md        Player-facing rules and the price model
 docs/scenario-authoring.md  The scenario contract and how to add one
@@ -130,13 +130,16 @@ See `.env.example`.
 | `DATABASE_URL` | Optional PostgreSQL URL (Supabase session pooler). Unset = in memory only. |
 | `DATABASE_CA_CERT` | Optional PEM CA certificate for verified TLS to the database (Supabase's). |
 | `DIRECT_URL` | Optional URL for migrations only, when `DATABASE_URL` is a transaction pooler. |
-| `GEMINI_API_KEY` | Optional. Turns on the AI-written round summary. Game server only. |
-| `GEMINI_MODEL` | Optional. Model for the summary (default `gemini-3.5-flash-lite`). |
-| `GEMINI_RPM` / `GEMINI_TPM` / `GEMINI_RPD` | Optional. The key's quota (default 15 requests/min, 250,000 tokens/min, 500 requests/day). |
+| `GEMINI_API_KEY` | Optional. A free Google AI Studio key turns on Gemma 4: AI Scenario mode and the AI round summary. Game server only. |
+| `GEMINI_MODEL` | Optional. Set a Gemini model (for example `gemini-3.5-flash-lite`) to keep the round summary on Gemini instead of Gemma. |
+| `GEMMA_MODEL` | Optional. Gemma model (default `gemma-4-26b-a4b-it`, faster; or `gemma-4-31b-it`). With Ollama, e.g. `gemma4`. |
+| `OLLAMA_URL`, `GEMMA_PROVIDER` | Optional. Self-hosted Gemma through Ollama instead of the Gemini API, or `GEMMA_PROVIDER=off` to disable Gemma. |
+| `GEMMA_TIMEOUT_MS`, `AI_POOL_SIZE`, `AI_WARMUP`, `AI_MIN_INTERVAL_MS` | Optional. Per-call timeout, scenarios kept ready (default 2), whether to fill the pool at boot, and the minimum gap between calls. |
+| `GEMINI_RPM` / `GEMINI_TPM` / `GEMINI_RPD` | Optional. The key's quota (default 15 requests/min, 250,000 tokens/min, 500 requests/day), shared by scenarios and summaries. |
 
 ## AI round summary (optional)
 
-With `GEMINI_API_KEY` set on the game server, the results screen shows a short "AI-written summary" a few seconds after a round ends. Results never wait for it. It is built to use as few tokens as possible:
+With `GEMINI_API_KEY` set on the game server, the summary is written by Gemma 4 by default. Set `GEMINI_MODEL=gemini-3.5-flash-lite` to keep it on Gemini. Either way the results screen shows a short "AI-written summary" a few seconds after a round ends. Results never wait for it. It is built to use as few tokens as possible:
 
 - **One call per round**, made when the round finishes, with no retries.
 - **A compact prompt:** about 60 tokens of instruction plus about 250 tokens of facts for a 4-player round (short labelled lines instead of JSON, which measured 923 tokens). Only the fields the recap needs are sent: the outcome, each company's % move, the ranking with each player's clue, and the three largest trades.
@@ -145,7 +148,16 @@ With `GEMINI_API_KEY` set on the game server, the results screen shows a short "
 
 - **Never over quota.** Every call first takes a slot from a limiter that stays 10% under the key's limits (13 requests/min, 225,000 tokens/min, 450 requests/day by default), over sliding windows. With no room, the call isn't made and the built-in debrief is shown. A 429 from the API pauses calls for a minute. After a restart, the daily count is rebuilt from rounds finished in the last 24 h (needs `DATABASE_URL`). The count is per server process, so a dev server using the same key isn't counted.
 
-The server logs each call's token usage: `AI summary tokens: N in, M out`.
+The server logs each call's token usage: `AI summary tokens: N in, M out` (Gemini path).
+
+## AI Scenario mode (Gemma 4)
+
+With `GEMINI_API_KEY` (or `OLLAMA_URL`) set, the lobby gains an **AI Scenario** card. The host can type an optional theme (for example "a port strike"), and Gemma writes the news, the five clues (one false rumor), the market events and the hidden resolution. Without a key the card is hidden and nothing else changes.
+
+- **Held to the same bar as built-in scenarios.** A reply must pass the scenario contract, playability checks (enough assets move, drift stays sane, the title and teaser don't give away the ending) and the balance simulator behind `pnpm balance`: Gemma also writes the balance hints, and the round must meet every balance target on at least 6 of 8 random seeds. Failures are retried with the exact problems (up to 3 attempts). The server picks the scenario id and a seed that passed; the model never does.
+- **Instant and safe.** A small pool of ready scenarios is filled in the background (`AI_POOL_SIZE`). If Gemma is slow, over quota or down, the room gets a built-in scenario and says so. Starting is blocked only while Gemma is still writing. "Play again" writes a fresh scenario.
+- **One shared quota.** Scenarios and summaries share the limiter above. A scenario costs 1 to 3 calls. Set `AI_WARMUP=false` to spend nothing until a host asks.
+- **Replayable.** AI-written rounds are saved in full (`GameRoom.scenarioConfig`). Run `pnpm db:migrate` to add the column.
 
 ## Deploying
 
@@ -186,4 +198,5 @@ If the database goes down, the game keeps running and only logs the failed write
 
 - Rounds in progress live in memory, so a server restart ends them. Finished rounds, trades and results are saved when `DATABASE_URL` is set (see "Optional: database on Supabase").
 - Four scenarios. Adding one takes a config file and one registry line; see [docs/scenario-authoring.md](docs/scenario-authoring.md). `pnpm test` checks it against the contract and the balance targets.
-- The AI summary is optional and off without `GEMINI_API_KEY`. It only narrates results the engine already computed: every number in it must appear in the results, or it is discarded and the built-in debrief is shown alone. It is not saved to the database.
+- AI features are optional and off without `GEMINI_API_KEY` (or `OLLAMA_URL`). AI-written scenarios wait in an in-memory pool that a restart empties; the Gemini free tier has no paid upgrade, so heavy use falls back to the built-in scenarios.
+- The AI summary is optional. It only narrates results the engine already computed: every number in it must appear in the results, or it is discarded and the built-in debrief is shown alone. It is not saved to the database.

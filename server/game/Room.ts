@@ -4,6 +4,7 @@ import { S2C } from "../../shared/events";
 import { MAX_PLAYERS_PER_ROOM, STARTING_CASH } from "../../shared/rules";
 import type { TradeSubmitInput } from "../../shared/schemas";
 import type {
+  AiScenarioSource,
   AssetQuote,
   AssetReveal,
   ErrorCode,
@@ -35,6 +36,7 @@ import {
   type Account,
 } from "../engine/portfolio";
 import { buildFactSheet, writeDebrief, type DebriefGenerator } from "../ai/debrief";
+import { AI_LISTING, AI_SCENARIO_ID, noAiScenarios, type AcquiredScenario, type AiScenarios } from "../ai/services";
 import { noopPersistence, type Persistence } from "../persistence/types";
 import { publicScenarios, type ScenarioRegistry } from "../scenarios";
 import type { ScenarioConfig } from "../scenarios/types";
@@ -85,6 +87,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   DUPLICATE_REQUEST: "That order was already submitted.",
   RATE_LIMITED: "Slow down a little and try again.",
   UNKNOWN_SCENARIO: "That scenario doesn't exist.",
+  SCENARIO_PENDING: "Gemma is still writing the scenario. Start once it's ready.",
 };
 
 const HOST_GRACE_MS = 15_000;
@@ -113,6 +116,12 @@ export class Room {
   private interval: NodeJS.Timeout | null = null;
   private hostTimer: NodeJS.Timeout | null = null;
   private scenario: ScenarioConfig;
+  /** The host chose the AI scenario; stays set across rounds until they pick a built-in one. */
+  private aiSelected = false;
+  private aiGenerating = false;
+  private aiSource: AiScenarioSource | null = null;
+  /** Bumped whenever a pending AI scenario should be ignored (another pick, dispose). */
+  private aiToken = 0;
 
   constructor(
     readonly code: string,
@@ -124,6 +133,7 @@ export class Room {
     private readonly emitter: RoomEmitter,
     private readonly persistence: Persistence = noopPersistence,
     private readonly debrief: RoomDebrief | null = null,
+    private readonly ai: AiScenarios = noAiScenarios,
   ) {
     const scenario = registry.get(scenarioId);
     if (!scenario) throw new Error(`Unknown scenario: ${scenarioId}`);
@@ -217,15 +227,60 @@ export class Room {
   }
 
   /** Host-only, lobby-only. The choice is public; the scenario's hidden fields stay here. */
-  selectScenario(requesterId: string, scenarioId: string): GameError | null {
+  selectScenario(requesterId: string, scenarioId: string, theme?: string): GameError | null {
     if (!this.players.has(requesterId)) return gameError("NOT_IN_ROOM");
     if (requesterId !== this.hostPlayerId) return gameError("NOT_HOST");
     if (this.status !== "LOBBY") return gameError("ROUND_IN_PROGRESS");
+    if (scenarioId === AI_SCENARIO_ID) {
+      if (!this.ai.enabled) return gameError("UNKNOWN_SCENARIO");
+      this.beginAiScenario(theme);
+      this.touch();
+      return null;
+    }
     const scenario = this.registry.get(scenarioId);
     if (!scenario) return gameError("UNKNOWN_SCENARIO");
+    this.cancelAiScenario();
+    this.aiSelected = false;
+    this.aiSource = null;
     this.scenario = scenario;
     this.touch();
     return null;
+  }
+
+  /**
+   * Asks the AI layer for a scenario in the background. Until it arrives the room keeps its previous
+   * scenario but cannot start. A late or superseded result is handed back instead of applied.
+   */
+  private beginAiScenario(theme?: string): void {
+    const token = ++this.aiToken;
+    this.aiSelected = true;
+    this.aiGenerating = true;
+    this.aiSource = null;
+    void this.ai.acquire(theme).then(
+      (acquired) => this.finishAiScenario(token, acquired),
+      () => this.finishAiScenario(token, null),
+    );
+  }
+
+  private finishAiScenario(token: number, acquired: AcquiredScenario | null): void {
+    if (token !== this.aiToken || this.status !== "LOBBY") {
+      if (acquired?.source === "gemma") this.ai.release(acquired.scenario);
+      return;
+    }
+    this.aiGenerating = false;
+    if (acquired) {
+      this.scenario = acquired.scenario;
+      this.aiSource = acquired.source;
+    } else {
+      this.aiSource = "fallback";
+    }
+    this.touch();
+    this.broadcastState();
+  }
+
+  private cancelAiScenario(): void {
+    this.aiToken += 1;
+    this.aiGenerating = false;
   }
 
   // ---------- lifecycle: LOBBY → STARTING → ACTIVE → RESOLVING → FINISHED ----------
@@ -238,6 +293,7 @@ export class Room {
       const error = this.selectScenario(requesterId, scenarioId);
       if (error) return error;
     }
+    if (this.aiGenerating) return gameError("SCENARIO_PENDING");
 
     this.status = "STARTING";
     const roundId = randomUUID();
@@ -283,6 +339,7 @@ export class Room {
         scenarioId: this.scenario.id,
         scenarioVersion: this.scenario.version,
         seed: this.scenario.seed,
+        scenarioConfig: this.aiSelected && this.aiSource === "gemma" ? this.scenario : undefined,
         players: ordered.map((pl) => ({
           id: pl.id,
           displayName: pl.displayName,
@@ -387,6 +444,8 @@ export class Room {
       player.clue = null;
       player.requestIds = new Set();
     }
+    // Another AI round means a fresh story, not the same hidden truth again.
+    if (this.aiSelected) this.beginAiScenario();
     this.broadcastState();
     for (const id of this.players.keys()) this.emitPlayerState(id);
     this.touch();
@@ -471,7 +530,7 @@ export class Room {
         teaser: this.scenario.teaser,
         seed: this.scenario.seed,
       },
-      scenarios: publicScenarios(this.registry),
+      scenarios: this.ai.enabled ? [...publicScenarios(this.registry), AI_LISTING] : publicScenarios(this.registry),
       phaseEndsAt: this.phaseEndsAt,
       serverNow: Date.now(),
       startingCash: STARTING_CASH,
@@ -479,6 +538,7 @@ export class Room {
       news: [...this.news],
       leaderboard: this.path ? this.leaderboard() : [],
       results: this.results,
+      ai: { enabled: this.ai.enabled, selected: this.aiSelected, generating: this.aiGenerating, source: this.aiSource },
     };
   }
 
@@ -507,6 +567,7 @@ export class Room {
   }
 
   dispose(): void {
+    this.aiToken += 1;
     if (this.timeout) clearTimeout(this.timeout);
     if (this.interval) clearInterval(this.interval);
     if (this.hostTimer) clearTimeout(this.hostTimer);

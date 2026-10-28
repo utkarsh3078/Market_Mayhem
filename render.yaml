@@ -25,6 +25,9 @@ services:
       # Recommended with Supabase: its CA certificate (PEM) for verified TLS.
       - key: DATABASE_CA_CERT
         sync: false
-      # Optional. Enables the Gemini-written round summary (one short call per round).
+      # Optional. Free Google AI Studio key: turns on Gemma 4 AI scenarios and the round summary. Server-side only.
       - key: GEMINI_API_KEY
+        sync: false
+      # Optional. gemma-4-26b-a4b-it (default, faster) or gemma-4-31b-it.
+      - key: GEMMA_MODEL
         sync: false

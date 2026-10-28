@@ -1,0 +1,1 @@
+ALTER TABLE "GameRoom" ADD COLUMN     "scenarioConfig" JSONB;

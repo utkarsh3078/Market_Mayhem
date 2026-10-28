@@ -54,6 +54,7 @@ export function createPrismaPersistence(
               scenarioId: r.scenarioId,
               scenarioVersion: r.scenarioVersion,
               seed: r.seed,
+              ...(r.scenarioConfig ? { scenarioConfig: r.scenarioConfig as unknown as Prisma.InputJsonValue } : {}),
               players: {
                 create: r.players.map((p) => ({
                   playerId: p.id,

@@ -19,6 +19,7 @@ import type { Ack, ErrorCode, GameError, RoomState, Session } from "../shared/ty
 import { gameError, type Room, type RoomEmitter, type RoomTimings } from "./game/Room";
 import { RoomManager } from "./game/RoomManager";
 import type { DebriefGenerator } from "./ai/debrief";
+import { noAiScenarios, type AiScenarios } from "./ai/services";
 import { noopPersistence, type Persistence } from "./persistence/types";
 import { createRegistry, DEFAULT_SCENARIO_ID, SCENARIOS } from "./scenarios";
 import type { ScenarioConfig } from "./scenarios/types";
@@ -35,6 +36,8 @@ export interface GameServerOptions {
   persistence?: Persistence;
   /** Optional AI round summary (U6); off when absent. */
   debrief?: DebriefGenerator;
+  /** Optional Gemma-written scenarios; off when absent, so the game runs exactly as before. */
+  ai?: AiScenarios;
   log?: (message: string) => void;
 }
 
@@ -88,7 +91,8 @@ export function createGameServer(options: GameServerOptions): {
   if (!registry.has(defaultScenarioId)) throw new Error(`Unknown default scenario: ${defaultScenarioId}`);
   const persistence = options.persistence ?? noopPersistence;
   const debrief = options.debrief ? { generate: options.debrief, log } : null;
-  const rooms = new RoomManager(registry, defaultScenarioId, options.timings, emitter, persistence, debrief);
+  const ai = options.ai ?? noAiScenarios;
+  const rooms = new RoomManager(registry, defaultScenarioId, options.timings, emitter, persistence, debrief, ai);
   const sessions = new Map<string, SessionRecord>();
 
   // ---------- HTTP ----------
@@ -243,7 +247,8 @@ export function createGameServer(options: GameServerOptions): {
       if (!input) return;
       const room = currentRoom();
       if (!room) return fail(ack, "NOT_IN_ROOM");
-      const error = room.selectScenario(session.playerId, input.scenarioId);
+      if (rateLimited("scenario", 12, 60_000)) return fail(ack, "RATE_LIMITED");
+      const error = room.selectScenario(session.playerId, input.scenarioId, input.theme || undefined);
       if (error) return fail(ack, error);
       room.broadcastState();
       reply(ack, { ok: true, data: null });
@@ -319,6 +324,7 @@ export function createGameServer(options: GameServerOptions): {
     close: async () => {
       rooms.close();
       await io.close();
+      ai.close?.();
       await persistence.close();
     },
   };

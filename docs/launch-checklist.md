@@ -13,7 +13,7 @@
 - [ ] `NODE_ENV=production`
 - [ ] `CLIENT_ORIGIN` is the exact production web URL (`https://…`, no trailing slash). The startup log line `allowed origins: …` shows it.
 - [ ] `DATABASE_URL` (Supabase session pooler) and `DATABASE_CA_CERT`. The log shows `persistence: PostgreSQL`.
-- [ ] Optional: `GEMINI_API_KEY`. The log shows `AI round summary: on (…)`.
+- [ ] Optional: `GEMINI_API_KEY`. The log shows `AI scenarios: on (…)` and `AI round summary: on (…)`.
 - [ ] Start command `pnpm start:server`; health check `/health` returns `{"ok":true}`.
 
 **Web app (Vercel)**
@@ -29,7 +29,7 @@
 
 - [ ] Create a room on a laptop, join from a phone on mobile data, and play a full round.
 - [ ] The results screen loads; rows appear in Supabase → Table Editor.
-- [ ] With the Gemini key: the AI-written summary appears and its numbers match the table.
+- [ ] With the Gemini key: the AI-written summary appears and its numbers match the table. In the lobby, pick **AI Scenario**: it should be ready within a minute (or fall back to a built-in scenario with a note), and a full round should play normally.
 - [ ] Tag the release: `git tag v1.0 && git push origin v1.0`.
 
 ## Demo-day safety net

@@ -263,7 +263,7 @@ export function useGame() {
       dispatch({ type: "left" });
     },
     setReady: (ready: boolean) => call(C2S.PLAYER_READY, { ready }),
-    selectScenario: (scenarioId: string) => call(C2S.ROOM_SCENARIO, { scenarioId }),
+    selectScenario: (scenarioId: string, theme?: string) => call(C2S.ROOM_SCENARIO, { scenarioId, theme }),
     startGame: () => call(C2S.GAME_START),
     resetGame: () => call(C2S.GAME_RESET),
     submitTrade: (symbol: AssetSymbol, side: TradeSide, quantity: number) => {

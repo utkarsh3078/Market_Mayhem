@@ -47,3 +47,7 @@ Suggested values: `noise: 0.004`, `marketNoise: 0.0015`.
 - The LOW-confidence rumor never beats the HIGH clue.
 
 **The tuning rule that fixes most failures:** good news should move the price mostly *before* its headline, when only clue holders know, and the misleading headline should peak and reverse soon after. If a price move starts the moment its headline is published, chasing headlines wins, and the scenario teaches the wrong lesson. Adjust `perTick`, event windows or `shock` in small steps, and bump `version` when you change a published scenario.
+
+## AI-written scenarios
+
+The lobby's **AI Scenario** option (Gemma 4, needs `GEMINI_API_KEY` or `OLLAMA_URL`) is held to the same rules as a hand-written one. The generator in `server/ai/scenarioGenerator.ts` accepts a reply only if it passes the contract above, a few playability checks, and the balance targets on at least 6 of 8 random seeds. Gemma also writes the balance hints (what each clue and headline suggests) so the same simulator can play the round. Nothing it writes is trusted: ids and the seed are chosen by the server, numbers are clamped into range, and a failed reply is retried with the exact problems. If you change the contract or the balance targets, AI scenarios follow automatically; the prompt in `buildScenarioPrompt` states the rules in plain language, so update it too.

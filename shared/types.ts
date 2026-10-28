@@ -19,7 +19,8 @@ export type ErrorCode =
   | "INSUFFICIENT_HOLDINGS"
   | "DUPLICATE_REQUEST"
   | "RATE_LIMITED"
-  | "UNKNOWN_SCENARIO";
+  | "UNKNOWN_SCENARIO"
+  | "SCENARIO_PENDING";
 
 export interface GameError {
   code: ErrorCode;
@@ -119,10 +120,24 @@ export interface ScenarioListing {
   id: string;
   name: string;
   teaser: string;
+  /** Only set on the AI entry; built-in scenarios carry no kind. */
+  kind?: "ai";
 }
 
 export interface ScenarioSummary extends ScenarioListing {
   seed: string;
+}
+
+/** Where the room's current AI-mode scenario came from. "fallback" means Gemma was unavailable. */
+export type AiScenarioSource = "gemma" | "fallback";
+
+export interface RoomAiState {
+  /** Gemma-written scenarios are configured on this server. */
+  enabled: boolean;
+  /** The host picked the AI scenario (stays true across rounds until they pick another). */
+  selected: boolean;
+  generating: boolean;
+  source: AiScenarioSource | null;
 }
 
 export interface RoomState {
@@ -142,6 +157,7 @@ export interface RoomState {
   news: NewsItem[];
   leaderboard: LeaderboardEntry[];
   results: GameResults | null;
+  ai: RoomAiState;
 }
 
 export interface AssetReveal {

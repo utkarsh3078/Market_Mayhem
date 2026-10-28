@@ -45,6 +45,8 @@ model GameRoom {
   finishedAt      DateTime?
   /// The full GameResults payload, served by GET /api/rooms/:code/results after the room leaves memory.
   results         Json?
+  /// The full generated scenario (hidden truth included) for AI-written rounds; null for built-in scenarios.
+  scenarioConfig  Json?
   players         RoomPlayer[]
   trades          Trade[]
   gameResults     GameResult[]
