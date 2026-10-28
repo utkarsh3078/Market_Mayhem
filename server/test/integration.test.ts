@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 import { io as connect, type Socket } from "socket.io-client";
 import { C2S, S2C } from "../../shared/events";
+import type { NewsroomSegment } from "../../shared/newsroom";
 import type {
   Ack,
   GameResults,
@@ -77,8 +78,15 @@ describe("multiplayer round", () => {
     const notHost = await call(bob.socket, C2S.GAME_START);
     assert.equal(!notHost.ok && notHost.error.code, "NOT_HOST");
 
+    const bobToggle = await call(bob.socket, C2S.ROOM_NEWSROOM, { enabled: false });
+    assert.equal(!bobToggle.ok && bobToggle.error.code, "NOT_HOST");
+
     let eveSawClue = false;
     eve.socket.on(S2C.CLUE_PRIVATE, () => (eveSawClue = true));
+    let eveSawSegment = false;
+    eve.socket.on(S2C.NEWSROOM_SEGMENT, () => (eveSawSegment = true));
+    const bobSegments: NewsroomSegment[] = [];
+    bob.socket.on(S2C.NEWSROOM_SEGMENT, (s: NewsroomSegment) => bobSegments.push(s));
     const bobClues: PrivateClue[] = [];
     bob.socket.on(S2C.CLUE_PRIVATE, (c: PrivateClue) => bobClues.push(c));
 
@@ -131,6 +139,14 @@ describe("multiplayer round", () => {
     const aliceRow = finished.leaderboard.find((r) => r.displayName === "Alice")!;
     assert.equal(aliceRow.pnl, aliceRow.portfolioValue - 10_000_000);
     assert.equal(aliceRow.clueTitle, clueA.title);
+    assert.ok(bobSegments.length > 0, "the room receives newsroom segments");
+    for (const segment of bobSegments) {
+      assert.equal(segment.roundId, roundId);
+      assert.deepEqual(Object.keys(segment).sort(), [
+        "airTick", "category", "durationMs", "headline", "lines", "roundId", "segmentId", "startedAt",
+      ]);
+    }
+    assert.equal(finished.broadcast?.segments.length, bobSegments.length, "the broadcast log lists every aired story");
 
     const afterClose = await trade(alice.socket, { roundId, requestId: "req-000006", symbol: "NVE", side: "SELL", quantity: 1 });
     assert.equal(!afterClose.ok && afterClose.error.code, "ROUND_CLOSED");
@@ -151,6 +167,7 @@ describe("multiplayer round", () => {
     const reset = await call(again.socket, C2S.GAME_RESET);
     assert.ok(reset.ok);
     assert.equal(eveSawClue, false, "clues never reach players outside the room");
+    assert.equal(eveSawSegment, false, "newsroom segments never reach players outside the room");
   });
 
   it("serves health and assets", async () => {

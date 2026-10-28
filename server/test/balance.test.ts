@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { isAssetSymbol } from "../../shared/assets";
 import { altSeeds, checkBalance, simulate } from "../balance/simulate";
+import { resolveNewsroomPlan, withNewsroom } from "../newsroom/plan";
 import { BALANCE_HINTS, SCENARIOS } from "../scenarios";
 
 // The execution plan's F5 balance targets, automated. `pnpm balance` prints the full table.
@@ -35,6 +36,13 @@ describe("scenario balance", () => {
       it("stays balanced on most alternative seeds, not just the demo one", () => {
         const seeds = altSeeds(scenario);
         const passed = seeds.filter((seed) => checkBalance(simulate(scenario, hints!, seed)).every((c) => c.ok));
+        assert.ok(passed.length >= seeds.length - 1, `all targets met on only ${passed.length}/${seeds.length} seeds`);
+      });
+
+      it("stays balanced with the Live Newsroom's price moves on", () => {
+        const market = withNewsroom(scenario, resolveNewsroomPlan(scenario));
+        const seeds = [scenario.seed, ...altSeeds(scenario)];
+        const passed = seeds.filter((seed) => checkBalance(simulate(market, hints!, seed)).every((c) => c.ok));
         assert.ok(passed.length >= seeds.length - 1, `all targets met on only ${passed.length}/${seeds.length} seeds`);
       });
     });

@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { ROOM_CODE_LENGTH } from "../../shared/rules";
 import type { Persistence } from "../persistence/types";
 import type { ScenarioRegistry } from "../scenarios";
-import { Room, type RoomDebrief, type RoomEmitter, type RoomTimings } from "./Room";
+import { Room, type RoomDebrief, type RoomEmitter, type RoomOptions, type RoomTimings } from "./Room";
 
 // No 0/O/1/I to keep codes easy to read aloud.
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -19,6 +19,7 @@ export class RoomManager {
     private readonly emitter: RoomEmitter,
     private readonly persistence: Persistence,
     private readonly debrief: RoomDebrief | null = null,
+    private readonly roomOptions: RoomOptions = {},
   ) {
     this.sweeper = setInterval(() => this.sweep(), 60_000);
     this.sweeper.unref();
@@ -39,6 +40,7 @@ export class RoomManager {
       this.emitter,
       this.persistence,
       this.debrief,
+      this.roomOptions,
     );
     this.rooms.set(code, room);
     return room;

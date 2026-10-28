@@ -27,6 +27,8 @@ export const scenarioIdSchema = z.string().trim().min(1).max(64);
 
 export const scenarioSelectSchema = z.object({ scenarioId: scenarioIdSchema });
 
+export const newsroomToggleSchema = z.object({ enabled: z.boolean() });
+
 export const gameStartSchema = z.object({ scenarioId: scenarioIdSchema.optional() });
 
 export const tradeSubmitSchema = z.object({

@@ -32,13 +32,25 @@ noise     = seeded random in ±0.4% (asset) + ±0.15% (whole market)
 nextPrice = clamp(price × (1 + return), 0.2 × open, 5 × open)
 ```
 
-The underlying path is fully determined by the scenario seed. The same seed always produces the same market. Player trades add a temporary, decaying impact on top of that path. When the round closes, the hidden event applies a one-off shock to each asset.
+The underlying path is fully determined by the seed. The same seed always produces the same market. By default each round draws a fresh seed, so the noise differs from game to game; demos use the scenario's fixed seed. Live Newsroom stories add their own drift to `eventImpact` (see below). Player trades add a temporary, decaying impact on top of that path. When the round closes, the hidden event applies a one-off shock to each asset.
 
 ## Information
 
 - **Public news** is published to everyone at fixed ticks. Some headlines matter, some are noise, and some are already priced in by the time you read them.
 - **Private clues** are dealt in join order from the scenario's clue list, so every player gets a different one (clues repeat when there are more than 5 players). Each clue has a confidence level. Some are reliable and one is a false rumor. No clue reveals the whole outcome.
 - All clues are revealed on the results screen.
+
+## Live Newsroom
+
+When the host leaves it on (the default), the **Live News** button opens a full-screen news channel during the round.
+
+- An anchor reads a mix of general news (weather, sports, culture) and market stories about the five companies. Captions show every word, and you can mute the voice.
+- Stories appear **only** on the newsroom screen. If you are trading when a story airs, you miss it. There is no replay, and you join a story wherever it is when you open the screen.
+- You **can't trade** from the newsroom. "Back to trading" or Esc closes it.
+- A market story moves prices **a few ticks after it airs**, so watching gives you a short head start. Some market stories air back to back, and the second can change what the first meant.
+- Not every story is what it seems: some are noise, some were already priced in before they aired, and some cause an overreaction that reverses.
+- Everyone in the room sees each story at the same moment. After the bell, the results list every story that aired, what kind it really was, and roughly how much it moved each company.
+- With the newsroom off, no stories air and none of their price moves happen.
 
 ## Scenarios
 

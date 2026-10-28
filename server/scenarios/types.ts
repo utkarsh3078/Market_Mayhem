@@ -1,4 +1,5 @@
 import type { AssetSymbol } from "../../shared/assets";
+import type { NewsroomPlan } from "../../shared/newsroom";
 import type { ClueConfidence } from "../../shared/types";
 
 export type AssetWeights = Partial<Record<AssetSymbol, number>>;
@@ -50,6 +51,11 @@ export interface ScenarioConfig {
     explanations: Record<AssetSymbol, string>;
     lessons: string[];
   };
+  /**
+   * Live Newsroom stories (docs/newsroom-plan-format.md). Optional: without one, or if it fails
+   * validation, rounds air a plan built from `news` instead (server/newsroom/plan.ts).
+   */
+  newsroom?: NewsroomPlan;
 }
 
 /**

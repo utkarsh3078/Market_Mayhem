@@ -8,6 +8,7 @@ import { ASSETS } from "../shared/assets";
 import { C2S, S2C } from "../shared/events";
 import {
   gameStartSchema,
+  newsroomToggleSchema,
   playerReadySchema,
   roomCodeSchema,
   roomCreateSchema,
@@ -19,6 +20,7 @@ import type { Ack, ErrorCode, GameError, RoomState, Session } from "../shared/ty
 import { gameError, type Room, type RoomEmitter, type RoomTimings } from "./game/Room";
 import { RoomManager } from "./game/RoomManager";
 import type { DebriefGenerator } from "./ai/debrief";
+import { createNewsroomScripts, type ScriptGenerator } from "./newsroom/scripts";
 import { noopPersistence, type Persistence } from "./persistence/types";
 import { createRegistry, DEFAULT_SCENARIO_ID, SCENARIOS } from "./scenarios";
 import type { ScenarioConfig } from "./scenarios/types";
@@ -35,6 +37,10 @@ export interface GameServerOptions {
   persistence?: Persistence;
   /** Optional AI round summary (U6); off when absent. */
   debrief?: DebriefGenerator;
+  /** Optional AI anchor scripts for the Live Newsroom; templates when absent. */
+  newsroomScripts?: ScriptGenerator;
+  /** A fresh price seed every round; defaults to each scenario's fixed seed. */
+  randomSeeds?: boolean;
   log?: (message: string) => void;
 }
 
@@ -88,7 +94,12 @@ export function createGameServer(options: GameServerOptions): {
   if (!registry.has(defaultScenarioId)) throw new Error(`Unknown default scenario: ${defaultScenarioId}`);
   const persistence = options.persistence ?? noopPersistence;
   const debrief = options.debrief ? { generate: options.debrief, log } : null;
-  const rooms = new RoomManager(registry, defaultScenarioId, options.timings, emitter, persistence, debrief);
+  const scripts = createNewsroomScripts({ generate: options.newsroomScripts, log });
+  const rooms = new RoomManager(registry, defaultScenarioId, options.timings, emitter, persistence, debrief, {
+    randomSeeds: options.randomSeeds,
+    scripts,
+    log,
+  });
   const sessions = new Map<string, SessionRecord>();
 
   // ---------- HTTP ----------
@@ -244,6 +255,18 @@ export function createGameServer(options: GameServerOptions): {
       const room = currentRoom();
       if (!room) return fail(ack, "NOT_IN_ROOM");
       const error = room.selectScenario(session.playerId, input.scenarioId);
+      if (error) return fail(ack, error);
+      room.broadcastState();
+      reply(ack, { ok: true, data: null });
+    });
+
+    socket.on(C2S.ROOM_NEWSROOM, (payload: unknown, ack: unknown) => {
+      if (rateLimited("settings", 20, 10_000)) return fail(ack, "RATE_LIMITED");
+      const input = parse(newsroomToggleSchema, payload, ack);
+      if (!input) return;
+      const room = currentRoom();
+      if (!room) return fail(ack, "NOT_IN_ROOM");
+      const error = room.setNewsroom(session.playerId, input.enabled);
       if (error) return fail(ack, error);
       room.broadcastState();
       reply(ack, { ok: true, data: null });

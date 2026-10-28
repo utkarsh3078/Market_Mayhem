@@ -1,4 +1,5 @@
 import type { AssetSymbol } from "./assets";
+import type { BroadcastLog, NewsroomState } from "./newsroom";
 
 export type RoomStatus = "LOBBY" | "STARTING" | "ACTIVE" | "RESOLVING" | "FINISHED";
 export type TradeSide = "BUY" | "SELL";
@@ -140,6 +141,7 @@ export interface RoomState {
   startingCash: number;
   market: MarketSnapshot | null;
   news: NewsItem[];
+  newsroom: NewsroomState;
   leaderboard: LeaderboardEntry[];
   results: GameResults | null;
 }
@@ -173,6 +175,8 @@ export interface GameResults {
     assets: AssetReveal[];
     lessons: string[];
   };
+  /** Every Live Newsroom story that aired; absent when the newsroom was off. */
+  broadcast?: BroadcastLog;
   aiSummary?: AiSummary;
 }
 

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ASSET_BY_SYMBOL } from "@/shared/assets";
+import type { BroadcastLog as BroadcastLogData, NewsroomKind } from "@/shared/newsroom";
 import { arrow, formatCredits, formatPct, formatSigned, toneClass } from "@/lib/format";
 import type { GameActions, GameState } from "@/lib/useGame";
 import { Button, ConfidenceBadge, ConnectionDot, Logo, Panel, Sparkline } from "./ui";
@@ -173,6 +174,8 @@ export function Results({ state, actions }: { state: GameState; actions: GameAct
         </div>
       </Panel>
 
+      {results.broadcast && <BroadcastLog log={results.broadcast} />}
+
       {state.me && state.me.trades.length > 0 && (
         <Panel title={`Your trades (${state.me.trades.length})`}>
           <ul className="grid gap-x-6 divide-y divide-line sm:grid-cols-2 sm:divide-y-0">
@@ -194,5 +197,63 @@ export function Results({ state, actions }: { state: GameState; actions: GameAct
         Fictional educational simulation. Prices come from a deterministic scenario engine, not real markets.
       </footer>
     </main>
+  );
+}
+
+const KIND_LABEL: Record<NewsroomKind, { label: string; style: string }> = {
+  GENERAL: { label: "General", style: "bg-panel-2 text-muted" },
+  MARKET: { label: "Market", style: "bg-ink text-white" },
+  NOISE: { label: "Noise", style: "bg-panel-2 text-ink" },
+  PRICED_IN: { label: "Priced in", style: "bg-warn/15 text-warn" },
+  MISLEADING: { label: "Misleading", style: "bg-down/10 text-down" },
+};
+
+/** Every newsroom story that aired, what kind it really was, and what it moved. */
+function BroadcastLog({ log }: { log: BroadcastLogData }) {
+  return (
+    <Panel title="Broadcast log · Live Newsroom" action={<span className="text-xs text-faint">{log.segments.length} stories aired</span>}>
+      <ol className="divide-y divide-line">
+        {log.segments.map((s) => {
+          const kind = KIND_LABEL[s.kind];
+          return (
+            <li key={s.segmentId} className="grid gap-1 px-5 py-3 sm:grid-cols-[56px_96px_1fr] sm:items-baseline sm:gap-3">
+              <span className="num font-mono text-xs text-faint">tick {s.airTick}</span>
+              <span>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase ${kind.style}`}>
+                  {kind.label}
+                </span>
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold leading-snug">{s.headline}</span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  {s.moves.length
+                    ? s.moves
+                        .map(
+                          (m) =>
+                            `${m.symbol} ${arrow(m.pct)} about ${Math.abs(m.pct).toFixed(1)}%` +
+                            (m.reverts ? ", then gave it back" : "") +
+                            (m.beforeAir ? ", before the story aired" : ""),
+                        )
+                        .join(" · ")
+                    : s.kind === "MARKET"
+                      ? "Reported a move already under way in the market."
+                      : "No effect on prices."}
+                </span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <ul className="space-y-2 border-t border-line p-5">
+        {log.lessons.map((lesson) => (
+          <li key={lesson} className="flex gap-3 text-sm leading-relaxed">
+            <span className="font-mono text-xs leading-6 text-accent" aria-hidden="true">
+              ◆
+            </span>
+            {lesson}
+          </li>
+        ))}
+      </ul>
+    </Panel>
   );
 }

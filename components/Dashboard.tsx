@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { ASSET_BY_SYMBOL, type AssetSymbol } from "@/shared/assets";
 import type { AssetQuote, NewsItem, PrivateClue } from "@/shared/types";
 import { arrow, formatCredits, formatPct, formatSigned, toneClass } from "@/lib/format";
 import { formatClock, useCountdown } from "@/lib/useCountdown";
 import type { GameActions, GameState } from "@/lib/useGame";
+import { unlockSpeech } from "@/lib/useSpeech";
+import { Newsroom } from "./Newsroom";
 import { PriceChart } from "./PriceChart";
 import { TradePanel } from "./TradePanel";
 import { ConfidenceBadge, ConnectionDot, Logo, Panel, Sparkline, Stat } from "./ui";
@@ -17,6 +19,8 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
   const [selected, setSelected] = useState<AssetSymbol>("NVE");
   // Shared by both clue placements (top on narrow screens, side column on wide ones).
   const [clueHidden, setClueHidden] = useState(false);
+  const [newsOpen, setNewsOpen] = useState(false);
+  const closeNews = useCallback(() => setNewsOpen(false), []);
   const remaining = useCountdown(room.phaseEndsAt, state.serverOffset);
 
   if (!market) return null;
@@ -46,7 +50,23 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
             <span className="hidden truncate font-display text-xl tracking-tight sm:inline">{room.scenario.name}</span>
             <span className="rounded-full bg-panel-2 px-2.5 py-0.5 font-mono text-xs text-muted">{room.code}</span>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            {room.newsroom.enabled && (
+              <button
+                onClick={() => {
+                  // This click is the gesture that lets the anchor's voice play on mobile.
+                  unlockSpeech();
+                  setNewsOpen(true);
+                }}
+                className="flex shrink-0 items-center gap-1.5 rounded-full bg-ink px-3 py-1.5 text-xs font-semibold whitespace-nowrap text-white hover:bg-ink/85 focus-visible:outline-2 focus-visible:outline-accent"
+              >
+                {room.status === "ACTIVE" && (
+                  <span className="mm-live h-2 w-2 rounded-full bg-[#ff5a4e]" aria-hidden="true" />
+                )}
+                Live News
+                {room.status === "ACTIVE" && <span className="sr-only"> (on air)</span>}
+              </button>
+            )}
             <div className="text-right" aria-live="off">
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-faint">{phase.label}</div>
               <div className={`num font-mono text-xl font-bold leading-none ${phase.tone}`}>
@@ -184,6 +204,10 @@ export function Dashboard({ state, actions }: { state: GameState; actions: GameA
           </div>
         </div>
       </main>
+
+      {newsOpen && room.newsroom.enabled && (
+        <Newsroom room={room} segment={state.segment} serverOffset={state.serverOffset} onClose={closeNews} />
+      )}
     </div>
   );
 }

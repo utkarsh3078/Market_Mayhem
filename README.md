@@ -13,6 +13,7 @@ Players trade five fictional assets with virtual credits, react to public headli
 1. **Open a room.** Enter a name, create a room, and share the 5-letter code (or the invite link). Everyone starts with 100,000 virtual credits. The host picks one of four scenarios.
 2. **Read the news, guard your clue.** Headlines reach everyone at once. You also get a private clue that nobody else sees, and it might be wrong: check its confidence level.
 3. **Trade before the bell.** Buy and sell five fictional companies. When the timer ends, the hidden event resolves, final prices are applied, and the highest portfolio value wins. The results screen reveals every player's clue and explains what really happened.
+4. **Or watch the news.** The **Live News** button opens MMN, a full-screen news channel with a speaking anchor. Some of its stories move prices a few ticks after they air, but you can't trade while you watch, and nothing is replayed.
 
 | Landing | Lobby |
 | --- | --- |
@@ -68,7 +69,8 @@ Everything in the blueprint's MVP scope:
 - A server-authoritative timer and a state machine: `LOBBY → STARTING → ACTIVE → RESOLVING → FINISHED`
 - Final ranking, every player's clue revealed ("who knew what"), a per-asset debrief and takeaways
 - Reconnect: refreshing mid-round restores your room, portfolio and clue
-- Seeded, reproducible market path (P1)
+- Seeded, reproducible market path (P1), with a fresh seed every round (`ROUND_SEED`)
+- **Live Newsroom:** a full-screen TV studio with an animated anchor, browser text-to-speech, live captions, story illustrations and a price ticker. See below.
 
 ## Architecture
 
@@ -110,9 +112,9 @@ Rooms are created and joined over Socket.IO (`room:create`, `room:join`), so cre
 
 ### Socket.IO events
 
-Client → server: `room:create`, `room:join`, `room:leave`, `player:ready`, `room:scenario` (host), `game:start` (host, optional `scenarioId`), `game:reset`, `trade:submit`, `game:requestState`
+Client → server: `room:create`, `room:join`, `room:leave`, `player:ready`, `room:scenario` (host), `room:newsroom` (host, `{ enabled }`), `game:start` (host, optional `scenarioId`), `game:reset`, `trade:submit`, `game:requestState`
 
-Server → client: `session`, `room:state`, `player:state` (private), `game:started`, `news:publish`, `clue:private` (private), `market:update`, `trade:result` (private), `game:finished`
+Server → client: `session`, `room:state`, `player:state` (private), `game:started`, `news:publish`, `newsroom:segment`, `clue:private` (private), `market:update`, `trade:result` (private), `game:finished`
 
 Private events go to a per-player channel (`player:<id>`), never the room channel. Errors use structured codes such as `INSUFFICIENT_CASH`, `ROUND_CLOSED`, `INVALID_QUANTITY`, `NOT_IN_ROOM` and `DUPLICATE_REQUEST`.
 
@@ -133,6 +135,19 @@ See `.env.example`.
 | `GEMINI_API_KEY` | Optional. Turns on the AI-written round summary. Game server only. |
 | `GEMINI_MODEL` | Optional. Model for the summary (default `gemini-3.5-flash-lite`). |
 | `GEMINI_RPM` / `GEMINI_TPM` / `GEMINI_RPD` | Optional. The key's quota (default 15 requests/min, 250,000 tokens/min, 500 requests/day). |
+| `ROUND_SEED` | `random` (default): a new price seed every round. `scenario`: each scenario's fixed seed, for demos and replays (`pnpm demo:fast` uses it). |
+| `NEWSROOM_SCRIPTS` | Live Newsroom anchor scripts: `none` (default, built-in templates) or `gemini` (needs `GEMINI_API_KEY`). |
+| `NEWSROOM_MODEL` | Optional. Model for newsroom scripts, a Gemini or Gemma model id. Defaults to `GEMINI_MODEL`. |
+
+## Live Newsroom
+
+During a round, **Live News** opens MMN (Market Mayhem News), a full-screen studio drawn in SVG and CSS. An anchor reads general and market stories aloud with the browser's built-in speech (Web Speech API, no key needed). Captions are always on, and the anchor's mouth follows the words.
+
+- **The engine decides every move.** Each scenario's `newsroom` plan says which stories air, when, and which prices they move ([docs/newsroom-plan-format.md](docs/newsroom-plan-format.md)). Effects become ordinary scenario events, so the same seed still gives the same market. The anchor's wording can't change any of it.
+- **Watching costs trading time.** Stories show only on the newsroom screen, with no feed, toast or replay. Trading is closed while it is open, and some market stories air back to back.
+- **No leaks.** `newsroom:segment` reaches the room only when a story airs, and it carries the headline, the caption lines and timing, never the story's kind or effects. Late joiners get only the story on air. After the bell, the results show a **broadcast log**: every story, what kind it really was, and what it moved.
+- **Works with any scenario, and with no AI.** Every plan, hand-written or generated, is checked by `validateNewsroomPlan`. A missing or broken plan is replaced by one built from the scenario's news. Scripts come from templates by default. With `NEWSROOM_SCRIPTS=gemini`, a model rewords each story once per scenario in the lobby (cached, shared quota with the summary). Any line that adds a number, or a failed call, falls back to the template, so a round never waits for a model. Render's free tier can't run a local model such as Ollama, so use the hosted API or templates in production.
+- The host can turn it off in the lobby. With it off, no stories air and their price moves don't happen.
 
 ## AI round summary (optional)
 

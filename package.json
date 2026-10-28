@@ -6,7 +6,7 @@
     "dev": "concurrently -k -n web,server -c cyan,magenta \"next dev\" \"tsx watch server/index.ts\"",
     "dev:web": "next dev",
     "dev:server": "tsx watch server/index.ts",
-    "demo:fast": "concurrently -k -n web,server -c cyan,magenta \"next dev\" \"TICK_MS=700 STARTING_MS=5000 tsx server/index.ts\"",
+    "demo:fast": "concurrently -k -n web,server -c cyan,magenta \"next dev\" \"TICK_MS=700 STARTING_MS=5000 ROUND_SEED=scenario tsx server/index.ts\"",
     "build": "prisma generate && next build",
     "start": "next start",
     "start:server": "prisma generate && NODE_ENV=production tsx server/index.ts",

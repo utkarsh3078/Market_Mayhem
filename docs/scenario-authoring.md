@@ -10,7 +10,8 @@ This is the contract between whoever writes a scenario and `server/test/scenario
 2. Register both in `server/scenarios/index.ts` with one line in `REGISTERED`: `{ config: <name>, hints: <name>Hints }`.
 3. Run `pnpm test`. It checks the contract below and the balance targets. A failure names every rule the file breaks.
 4. Run `pnpm balance` to see the full strategy table, and tune until every target passes.
-5. Play it with `pnpm demo:fast`. The host can pick it in the lobby.
+5. Optionally, add a `newsroom` plan with the scenario's Live Newsroom stories ([newsroom-plan-format.md](newsroom-plan-format.md)). Without one, rounds air a plan built from the scenario's `news`, which adds no price moves of its own. `pnpm test` checks that every scenario's plan validates without repairs and that the balance targets still hold with its moves on.
+6. Play it with `pnpm demo:fast`. The host can pick it in the lobby.
 
 Scenario files are server-only. They hold the hidden truth, so the web app must never import them. Before a round starts, the lobby only ever receives `id`, `name` and `teaser`. The hints are a separate export for the same reason: clue and news objects are sent to players as-is.
 
@@ -25,6 +26,7 @@ Scenario files are server-only. They hold the hidden truth, so the web app must 
 | `clues` | Exactly 5, unique ids; at least one `HIGH` and at least one `LOW`; every field non-empty. |
 | `resolution` | `|shock| ≤ 0.10` for every asset; explanations for all of NVE, CLD, AGR, QTM, MTB; 3–4 lessons. |
 | price path | `generatePricePath` stays inside `priceBounds` for every asset, and the same seed produces an identical path twice. |
+| `newsroom` | Optional. Must pass `validateNewsroomPlan` with no warnings: beats 2+ ticks apart, at least 2 `GENERAL` and 1 `MARKET` beat, effects within the drift, delay and size caps. See [newsroom-plan-format.md](newsroom-plan-format.md). |
 
 Suggested values: `noise: 0.004`, `marketNoise: 0.0015`.
 

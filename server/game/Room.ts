@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ASSETS, ASSET_SYMBOLS, type AssetSymbol } from "../../shared/assets";
 import { S2C } from "../../shared/events";
+import type { BroadcastLogEntry, NewsroomPlan, NewsroomSegment } from "../../shared/newsroom";
 import { MAX_PLAYERS_PER_ROOM, STARTING_CASH } from "../../shared/rules";
 import type { TradeSubmitInput } from "../../shared/schemas";
 import type {
@@ -35,6 +36,8 @@ import {
   type Account,
 } from "../engine/portfolio";
 import { buildFactSheet, writeDebrief, type DebriefGenerator } from "../ai/debrief";
+import { NEWSROOM_LESSONS, resolveNewsroomPlan, toLogEntry, withNewsroom } from "../newsroom/plan";
+import { createNewsroomScripts, fitToSlot, slotMs, type NewsroomScripts } from "../newsroom/scripts";
 import { noopPersistence, type Persistence } from "../persistence/types";
 import { publicScenarios, type ScenarioRegistry } from "../scenarios";
 import type { ScenarioConfig } from "../scenarios/types";
@@ -49,6 +52,14 @@ export interface RoomTimings {
 export interface RoomDebrief {
   generate: DebriefGenerator;
   log: (message: string) => void;
+}
+
+export interface RoomOptions {
+  /** A fresh price seed every round (otherwise the scenario's own seed, for demos and replays). */
+  randomSeeds?: boolean;
+  /** Anchor scripts for the Live Newsroom; templates when absent. */
+  scripts?: NewsroomScripts;
+  log?: (message: string) => void;
 }
 
 export interface RoomEmitter {
@@ -113,6 +124,13 @@ export class Room {
   private interval: NodeJS.Timeout | null = null;
   private hostTimer: NodeJS.Timeout | null = null;
   private scenario: ScenarioConfig;
+  private seed: string | null = null;
+  private newsroomEnabled = true;
+  /** Fixed at round start; empty when the newsroom is off. */
+  private newsroomPlan: NewsroomPlan = { beats: [] };
+  private segment: NewsroomSegment | null = null;
+  private broadcast: BroadcastLogEntry[] = [];
+  private readonly scripts: NewsroomScripts;
 
   constructor(
     readonly code: string,
@@ -124,12 +142,15 @@ export class Room {
     private readonly emitter: RoomEmitter,
     private readonly persistence: Persistence = noopPersistence,
     private readonly debrief: RoomDebrief | null = null,
+    private readonly options: RoomOptions = {},
   ) {
     const scenario = registry.get(scenarioId);
     if (!scenario) throw new Error(`Unknown scenario: ${scenarioId}`);
     this.scenario = scenario;
+    this.scripts = options.scripts ?? createNewsroomScripts();
     this.hostPlayerId = hostId;
     this.addPlayer(hostId, hostName);
+    this.prefetchScripts();
   }
 
   // ---------- membership ----------
@@ -224,8 +245,25 @@ export class Room {
     const scenario = this.registry.get(scenarioId);
     if (!scenario) return gameError("UNKNOWN_SCENARIO");
     this.scenario = scenario;
+    this.prefetchScripts();
     this.touch();
     return null;
+  }
+
+  /** Host-only, lobby-only: turn the Live Newsroom (and the price moves its stories cause) on or off. */
+  setNewsroom(requesterId: string, enabled: boolean): GameError | null {
+    if (!this.players.has(requesterId)) return gameError("NOT_IN_ROOM");
+    if (requesterId !== this.hostPlayerId) return gameError("NOT_HOST");
+    if (this.status !== "LOBBY") return gameError("ROUND_IN_PROGRESS");
+    this.newsroomEnabled = enabled;
+    this.prefetchScripts();
+    this.touch();
+    return null;
+  }
+
+  /** Scripts are written in the lobby, ahead of the round, so live ticks never wait on a model. */
+  private prefetchScripts(): void {
+    if (this.newsroomEnabled) this.scripts.prefetch(this.scenario, resolveNewsroomPlan(this.scenario, this.options.log));
   }
 
   // ---------- lifecycle: LOBBY → STARTING → ACTIVE → RESOLVING → FINISHED ----------
@@ -242,7 +280,13 @@ export class Room {
     this.status = "STARTING";
     const roundId = randomUUID();
     this.roundId = roundId;
-    this.path = generatePricePath(this.scenario);
+    const seed = this.options.randomSeeds ? randomUUID() : this.scenario.seed;
+    this.seed = seed;
+    // The newsroom's stories are part of the market only when it is on, so every move has a story.
+    this.newsroomPlan = this.newsroomEnabled ? resolveNewsroomPlan(this.scenario, this.options.log) : { beats: [] };
+    this.path = generatePricePath(withNewsroom(this.scenario, this.newsroomPlan), seed);
+    this.segment = null;
+    this.broadcast = [];
     this.tick = 0;
     this.impact = this.zeroed();
     this.history = this.emptyHistory();
@@ -282,7 +326,7 @@ export class Room {
         code: this.code,
         scenarioId: this.scenario.id,
         scenarioVersion: this.scenario.version,
-        seed: this.scenario.seed,
+        seed,
         players: ordered.map((pl) => ({
           id: pl.id,
           displayName: pl.displayName,
@@ -313,13 +357,46 @@ export class Room {
       this.news.push(published);
       this.emitter.toRoom(this.code, S2C.NEWS_PUBLISH, published);
     }
+    this.airNewsroom();
     this.emitMarketUpdate();
     if (this.tick >= this.scenario.totalTicks) this.beginResolution();
+  }
+
+  /** Puts this tick's story on air for the whole room. The payload carries no kind and no effects. */
+  private airNewsroom(): void {
+    const plan = this.newsroomPlan;
+    const index = plan.beats.findIndex((b) => b.airTick === this.tick);
+    if (index < 0) return;
+    const beat = plan.beats[index];
+    const lines = fitToSlot(
+      this.scripts.linesFor(this.scenario, plan, beat, this.seed!),
+      slotMs(plan, index, this.timings.tickMs, this.scenario.totalTicks),
+    );
+    const last = lines[lines.length - 1];
+    this.segment = {
+      roundId: this.roundId!,
+      segmentId: `${this.roundId}:${beat.id}`,
+      headline: beat.headline,
+      category: beat.category,
+      airTick: this.tick,
+      lines,
+      startedAt: Date.now(),
+      durationMs: last.atMs + last.durationMs,
+    };
+    this.broadcast.push(toLogEntry(beat, this.segment.segmentId));
+    this.emitter.toRoom(this.code, S2C.NEWSROOM_SEGMENT, this.segment);
+  }
+
+  /** The story on air right now, for late joiners and reconnects. Nothing older is ever resent. */
+  private currentSegment(): NewsroomSegment | null {
+    if (this.status !== "ACTIVE" || !this.segment) return null;
+    return Date.now() < this.segment.startedAt + this.segment.durationMs ? this.segment : null;
   }
 
   private beginResolution(): void {
     if (this.interval) clearInterval(this.interval);
     this.interval = null;
+    this.segment = null;
     this.status = "RESOLVING";
     this.phaseEndsAt = Date.now() + this.timings.resolvingMs;
     this.broadcastState();
@@ -347,7 +424,12 @@ export class Room {
     for (const id of this.players.keys()) this.emitPlayerState(id);
     this.touch();
     // The saved copy leaves out the AI summary: it isn't final yet and only narrates these results.
-    const saved: GameResults = { roundId: results.roundId, leaderboard: results.leaderboard, reveal: results.reveal };
+    const saved: GameResults = {
+      roundId: results.roundId,
+      leaderboard: results.leaderboard,
+      reveal: results.reveal,
+      ...(results.broadcast ? { broadcast: results.broadcast } : {}),
+    };
     this.persist((p) => p.roundFinished(results.roundId, saved));
     if (this.debrief) this.requestDebrief(this.debrief, results);
   }
@@ -370,7 +452,11 @@ export class Room {
     if (this.status !== "FINISHED") return gameError("ROUND_IN_PROGRESS");
     this.status = "LOBBY";
     this.roundId = null;
+    this.seed = null;
     this.path = null;
+    this.segment = null;
+    this.broadcast = [];
+    this.newsroomPlan = { beats: [] };
     this.finalPrices = null;
     this.results = null;
     this.news = [];
@@ -477,6 +563,7 @@ export class Room {
       startingCash: STARTING_CASH,
       market: this.path ? this.marketSnapshot() : null,
       news: [...this.news],
+      newsroom: { enabled: this.newsroomEnabled, current: this.currentSegment() },
       leaderboard: this.path ? this.leaderboard() : [],
       results: this.results,
     };
@@ -625,6 +712,7 @@ export class Room {
         assets,
         lessons: resolution.lessons,
       },
+      ...(this.broadcast.length ? { broadcast: { segments: [...this.broadcast], lessons: NEWSROOM_LESSONS } } : {}),
     };
   }
 }

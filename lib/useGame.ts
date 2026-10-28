@@ -4,6 +4,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { io, type Socket } from "socket.io-client";
 import type { AssetSymbol } from "@/shared/assets";
 import { C2S, S2C } from "@/shared/events";
+import type { NewsroomSegment } from "@/shared/newsroom";
 import type {
   Ack,
   GameError,
@@ -41,6 +42,8 @@ export interface GameState {
   /** serverTime ≈ Date.now() + serverOffset */
   serverOffset: number;
   freshNewsId: string | null;
+  /** Latest Live Newsroom story. Only the newsroom screen shows it: no feed, toast or replay. */
+  segment: NewsroomSegment | null;
 }
 
 type Action =
@@ -51,6 +54,7 @@ type Action =
   | { type: "gameStarted"; payload: GameStartedPayload; offset: number }
   | { type: "marketUpdate"; payload: MarketUpdatePayload }
   | { type: "news"; item: NewsItem }
+  | { type: "segment"; segment: NewsroomSegment }
   | { type: "clue"; clue: PrivateClue }
   | { type: "finished"; results: GameResults }
   | { type: "tradePending"; requestId: string }
@@ -69,6 +73,7 @@ const initialState: GameState = {
   toasts: [],
   serverOffset: 0,
   freshNewsId: null,
+  segment: null,
 };
 
 function reducer(state: GameState, action: Action): GameState {
@@ -78,9 +83,12 @@ function reducer(state: GameState, action: Action): GameState {
     case "session":
       return { ...state, session: action.session };
     case "roomState": {
-      if (!action.room) return { ...state, room: null, me: null, clue: null };
+      if (!action.room) return { ...state, room: null, me: null, clue: null, segment: null };
       const clue = action.room.status === "LOBBY" ? null : state.clue;
-      return { ...state, room: action.room, clue, serverOffset: action.offset };
+      // A late joiner or reconnect gets the story on air now; otherwise keep this round's latest story.
+      const segment =
+        action.room.newsroom.current ?? (state.segment?.roundId === action.room.roundId ? state.segment : null);
+      return { ...state, room: action.room, clue, segment, serverOffset: action.offset };
     }
     case "playerState":
       return { ...state, me: action.me, clue: action.me.clue ?? state.clue };
@@ -90,6 +98,7 @@ function reducer(state: GameState, action: Action): GameState {
       return {
         ...state,
         serverOffset: action.offset,
+        segment: null,
         room: {
           ...state.room,
           roundId: payload.roundId,
@@ -133,6 +142,9 @@ function reducer(state: GameState, action: Action): GameState {
         room: { ...state.room, news: [...state.room.news, action.item] },
       };
     }
+    case "segment":
+      if (state.room?.roundId !== action.segment.roundId) return state;
+      return { ...state, segment: action.segment };
     case "clue":
       return { ...state, clue: action.clue };
     case "finished":
@@ -150,7 +162,7 @@ function reducer(state: GameState, action: Action): GameState {
     case "dismiss":
       return { ...state, toasts: state.toasts.filter((t) => t.id !== action.id) };
     case "left":
-      return { ...state, room: null, me: null, clue: null };
+      return { ...state, room: null, me: null, clue: null, segment: null };
   }
 }
 
@@ -215,6 +227,7 @@ export function useGame() {
       dispatch({ type: "news", item });
       toast({ tone: "warn", title: `Breaking · ${item.category}`, body: item.headline });
     });
+    socket.on(S2C.NEWSROOM_SEGMENT, (segment: NewsroomSegment) => dispatch({ type: "segment", segment }));
     socket.on(S2C.CLUE_PRIVATE, (clue: PrivateClue) => {
       dispatch({ type: "clue", clue });
       toast({ tone: "intel", title: "Private clue received", body: "Only you can see it. Look for the orange card." });
@@ -264,6 +277,7 @@ export function useGame() {
     },
     setReady: (ready: boolean) => call(C2S.PLAYER_READY, { ready }),
     selectScenario: (scenarioId: string) => call(C2S.ROOM_SCENARIO, { scenarioId }),
+    setNewsroom: (enabled: boolean) => call(C2S.ROOM_NEWSROOM, { enabled }),
     startGame: () => call(C2S.GAME_START),
     resetGame: () => call(C2S.GAME_RESET),
     submitTrade: (symbol: AssetSymbol, side: TradeSide, quantity: number) => {

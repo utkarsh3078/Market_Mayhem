@@ -131,7 +131,7 @@ const TIMEOUT_MS = 20_000;
 const MAX_OUTPUT_TOKENS = 160;
 
 /** Gemini 2.x turns thinking off with a zero budget; later models use levels, MINIMAL being cheapest. */
-function thinkingFor(model: string): ThinkingConfig {
+export function thinkingFor(model: string): ThinkingConfig {
   return /^gemini-2\./.test(model) ? { thinkingBudget: 0 } : { thinkingLevel: ThinkingLevel.MINIMAL };
 }
 

@@ -42,6 +42,11 @@ export function Lobby({ state, actions }: { state: GameState; actions: GameActio
     setError(res.ok ? null : res.error.message);
   }
 
+  async function toggleNewsroom() {
+    const res = await actions.setNewsroom(!room.newsroom.enabled);
+    setError(res.ok ? null : res.error.message);
+  }
+
   async function start() {
     const res = await actions.startGame();
     if (!res.ok) setError(res.error.message);
@@ -134,6 +139,34 @@ export function Lobby({ state, actions }: { state: GameState; actions: GameActio
                 {room.scenarios.length > 1 && <p className="mt-3 text-xs text-faint">The host chooses the scenario.</p>}
               </div>
             )}
+          </Panel>
+
+          <Panel title="Live Newsroom" action={isHost ? <span className="text-xs text-faint">Host picks</span> : null}>
+            <div className="flex items-start justify-between gap-4 p-5">
+              <p className="text-sm leading-relaxed text-muted">
+                A TV news channel you can watch during the round. Some stories move prices a few ticks after they air,
+                but you can&apos;t trade while you watch.
+              </p>
+              {isHost ? (
+                <button
+                  role="switch"
+                  aria-checked={room.newsroom.enabled}
+                  aria-label="Live Newsroom"
+                  onClick={toggleNewsroom}
+                  className={`relative mt-0.5 h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-accent ${
+                    room.newsroom.enabled ? "bg-ink" : "bg-line-strong"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 left-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                      room.newsroom.enabled ? "translate-x-5" : ""
+                    }`}
+                  />
+                </button>
+              ) : (
+                <span className="shrink-0 text-sm font-semibold">{room.newsroom.enabled ? "On" : "Off"}</span>
+              )}
+            </div>
           </Panel>
 
           <Panel title="Rules">

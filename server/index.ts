@@ -2,6 +2,8 @@ import { z } from "zod";
 import { createGeminiDebrief, DEFAULT_GEMINI_MODEL, type DebriefGenerator } from "./ai/debrief";
 import { DEFAULT_QUOTA, QuotaLimiter } from "./ai/rateLimit";
 import { createGameServer } from "./app";
+import { createGeminiScriptGenerator } from "./newsroom/gemini";
+import type { ScriptGenerator } from "./newsroom/scripts";
 import { parseClientOrigins } from "./origins";
 import { noopPersistence, type Persistence } from "./persistence/types";
 
@@ -32,6 +34,12 @@ const env = z
     GEMINI_RPM: z.coerce.number().int().positive().default(DEFAULT_QUOTA.rpm),
     GEMINI_TPM: z.coerce.number().int().positive().default(DEFAULT_QUOTA.tpm),
     GEMINI_RPD: z.coerce.number().int().positive().default(DEFAULT_QUOTA.rpd),
+    /** "random": a new price seed every round. "scenario": each scenario's fixed seed (demos, replays). */
+    ROUND_SEED: z.enum(["random", "scenario"]).default("random"),
+    /** Live Newsroom anchor scripts: "none" (built-in templates) or "gemini" (needs GEMINI_API_KEY). */
+    NEWSROOM_SCRIPTS: z.enum(["none", "gemini"]).default("none"),
+    /** Model for newsroom scripts (a Gemini or Gemma model id). Defaults to GEMINI_MODEL. */
+    NEWSROOM_MODEL: z.string().optional(),
   })
   .parse(process.env);
 
@@ -65,22 +73,36 @@ async function main() {
   }
 
   let debrief: DebriefGenerator | undefined;
+  let newsroomScripts: ScriptGenerator | undefined;
   if (env.GEMINI_API_KEY) {
+    // One limiter for the key: the round summary and newsroom scripts share its quota.
     const limiter = new QuotaLimiter({ rpm: env.GEMINI_RPM, tpm: env.GEMINI_TPM, rpd: env.GEMINI_RPD });
     // Each finished round made at most one call, so recent rounds restore the daily count after a restart.
     limiter.seed(await persistence.roundsFinishedSince(new Date(Date.now() - 24 * 60 * 60 * 1000)));
     debrief = createGeminiDebrief({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL, limiter, log });
     const { rpm, tpm, rpd } = limiter.limits;
     log(`AI round summary: on (${env.GEMINI_MODEL}, at most ${rpm} req/min, ${tpm} tokens/min, ${rpd} req/day)`);
+    if (env.NEWSROOM_SCRIPTS === "gemini") {
+      const model = env.NEWSROOM_MODEL || env.GEMINI_MODEL;
+      newsroomScripts = createGeminiScriptGenerator({ apiKey: env.GEMINI_API_KEY, model, limiter, log });
+      log(`newsroom scripts: ${model}, cached per scenario, templates as fallback`);
+    }
   } else {
     log("AI round summary: off (GEMINI_API_KEY not set)");
   }
+  if (!newsroomScripts) {
+    if (env.NEWSROOM_SCRIPTS === "gemini") log("newsroom scripts: GEMINI_API_KEY not set, using templates");
+    else log("newsroom scripts: built-in templates");
+  }
+  log(`round seeds: ${env.ROUND_SEED === "random" ? "fresh every round" : "fixed per scenario"}`);
 
   const server = createGameServer({
     clientOrigins,
     timings: { startingMs: env.STARTING_MS, tickMs: env.TICK_MS, resolvingMs: env.RESOLVING_MS },
     persistence,
     debrief,
+    newsroomScripts,
+    randomSeeds: env.ROUND_SEED === "random",
     log,
   });
 
